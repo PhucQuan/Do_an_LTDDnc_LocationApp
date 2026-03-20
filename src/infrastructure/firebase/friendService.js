@@ -7,103 +7,37 @@ import {
   setDoc,
   doc,
   getDoc,
-  serverTimestamp
+  updateDoc,
+  deleteDoc,
+  serverTimestamp,
+  onSnapshot
 } from "firebase/firestore";
 import { FriendUser } from "../../domain/entities/FriendUser";
 import { User } from "../../domain/entities/User";
 
 class FriendService {
   /**
-   * TÌM KIẾM HỆ THỐNG: Theo Email (Tìm được bất kỳ ai)
-   */
-  async searchUserByEmail(email) {
-    try {
-      const usersRef = collection(db, "users");
-      const q = query(usersRef, where("email", "==", email.toLowerCase().trim()));
-      const querySnapshot = await getDocs(q);
-
-      if (querySnapshot.empty) return null;
-
-      const userDoc = querySnapshot.docs[0];
-      const userData = User.fromFirestore(userDoc);
-
-      // Kiểm tra xem đã là bạn bè chưa
-      // Note: Bạn có thể thêm flag isFriend vào object trả về nếu muốn UI hiển thị khác đi
-      return userData;
-    } catch (error) {
-      console.error("Error searching user by email:", error);
-      throw error;
-    }
-  }
-
-  /**
-   * TÌM KIẾM BẠN BÈ: Theo Tên (Chỉ tìm trong những người đã kết bạn)
-   */
-  async searchFriendsByName(currentUid, nameQuery) {
-    try {
-      // 1. Lấy tất cả friendship của user này
-      const q = query(collection(db, "friendships"), where("status", "==", "accepted"));
-      const snapshot = await getDocs(q);
-
-      const friendsList = [];
-      const lowerQuery = nameQuery.toLowerCase().trim();
-
-      for (const d of snapshot.docs) {
-        const data = d.data();
-        let friendUid = null;
-
-        if (data.userId1 === currentUid) friendUid = data.userId2;
-        else if (data.userId2 === currentUid) friendUid = data.userId1;
-
-        if (friendUid) {
-          const userSnap = await getDoc(doc(db, "users", friendUid));
-          if (userSnap.exists()) {
-            const userData = userSnap.data();
-            // Lọc theo tên (không phân biệt hoa thường)
-            if (userData.name.toLowerCase().includes(lowerQuery)) {
-              friendsList.push({ id: d.id, ...userData, uid: friendUid });
-            }
-          }
-        }
-      }
-      return friendsList;
-    } catch (error) {
-      console.error("Error searching friends by name:", error);
-      throw error;
-    }
-  }
-
-  /**
-   * Kiểm tra trạng thái bạn bè
-   */
-  async getFriendshipStatus(uid1, uid2) {
-    try {
-      const friendshipId = FriendUser.generateId(uid1, uid2);
-      const docRef = doc(db, "friendships", friendshipId);
-      const docSnap = await getDoc(docRef);
-      return docSnap.exists() ? docSnap.data().status : null;
-    } catch (error) {
-      return null;
-    }
-  }
-
-  /**
-   * Kết bạn
+   * Gửi yêu cầu kết bạn (Trạng thái mặc định là pending)
    */
   async addFriend(currentUserId, targetUserId) {
     try {
       if (currentUserId === targetUserId) throw new Error("Không thể kết bạn với chính mình.");
 
       const friendshipId = FriendUser.generateId(currentUserId, targetUserId);
-      const status = await this.getFriendshipStatus(currentUserId, targetUserId);
+      const docSnap = await getDoc(doc(db, "friendships", friendshipId));
 
-      if (status === 'accepted') throw new Error("Hai bạn đã là bạn bè.");
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data.status === 'accepted') throw new Error("Hai bạn đã là bạn bè.");
+        if (data.status === 'pending') throw new Error("Yêu cầu kết bạn đang chờ xử lý.");
+      }
 
       const newFriendship = new FriendUser({
         id: friendshipId,
         userId1: currentUserId,
         userId2: targetUserId,
-        status: 'accepted',
+        status: 'pending',
+        requestSentBy: currentUserId
       });
 
       await setDoc(doc(db, "friendships", friendshipId), {
@@ -115,6 +49,75 @@ class FriendService {
     } catch (error) {
       throw error;
     }
+  }
+
+  /**
+   * Chấp nhận yêu cầu kết bạn
+   */
+  async acceptFriendRequest(friendshipId) {
+    try {
+      const docRef = doc(db, "friendships", friendshipId);
+      await updateDoc(docRef, {
+        status: 'accepted',
+        updatedAt: serverTimestamp()
+      });
+      return true;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Từ chối hoặc hủy yêu cầu kết bạn
+   */
+  async declineFriendRequest(friendshipId) {
+    try {
+      await deleteDoc(doc(db, "friendships", friendshipId));
+      return true;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Lấy danh sách yêu cầu kết bạn đang chờ mình phê duyệt
+   */
+  subscribeToPendingRequests(currentUid, callback) {
+    const q = query(
+      collection(db, "friendships"),
+      where("status", "==", "pending"),
+      where("requestSentBy", "!=", currentUid) // Chỉ lấy những cái KHÔNG PHẢI do mình gửi
+    );
+
+    return onSnapshot(q, async (snapshot) => {
+      const requests = [];
+      for (const d of snapshot.docs) {
+        const data = d.data();
+        // Kiểm tra xem mình có phải là 1 trong 2 người trong quan hệ này không
+        if (data.userId1 === currentUid || data.userId2 === currentUid) {
+          const senderId = data.requestSentBy;
+          const userSnap = await getDoc(doc(db, "users", senderId));
+          if (userSnap.exists()) {
+            requests.push({
+              friendshipId: d.id,
+              sender: User.fromFirestore(userSnap)
+            });
+          }
+        }
+      }
+      callback(requests);
+    });
+  }
+
+  /**
+   * Tìm kiếm hệ thống qua Email
+   */
+  async searchUserByEmail(email) {
+    const usersRef = collection(db, "users");
+    const q = query(usersRef, where("email", "==", email.toLowerCase().trim()));
+    const querySnapshot = await getDocs(q);
+    if (querySnapshot.empty) return null;
+    return User.fromFirestore(querySnapshot.docs[0]);
   }
 }
 

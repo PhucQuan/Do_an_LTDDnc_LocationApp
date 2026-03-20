@@ -10,6 +10,7 @@ import ForgotPasswordScreen from '../screens/Auth/ForgotPasswordScreen';
 import MapScreen from '../screens/main/MapScreen';
 import FriendsListScreen from '../screens/main/FriendsListScreen';
 import ProfileScreen from '../screens/main/ProfileScreen';
+import CreateGroupScreen from '../screens/main/CreateGroupScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -64,7 +65,10 @@ export default function AppNavigator({ isAuthenticated }) {
           <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
         </>
       ) : (
-        <Stack.Screen name="Main" component={MainTabNavigator} />
+        <>
+          <Stack.Screen name="Main" component={MainTabNavigator} />
+          <Stack.Screen name="CreateGroup" component={CreateGroupScreen} />
+        </>
       )}
     </Stack.Navigator>
   );

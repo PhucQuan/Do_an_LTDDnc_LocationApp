@@ -1,14 +1,15 @@
 export class FriendUser {
-  constructor({ id, userId1, userId2, status, createdAt }) {
-    this.id = id; // Thường là tổ hợp của userId1_userId2 để đảm bảo duy nhất
+  constructor({ id, userId1, userId2, status, requestSentBy, createdAt }) {
+    this.id = id; // Tổ hợp của userId1_userId2 (đã sắp xếp) để duy nhất
     this.userId1 = userId1;
     this.userId2 = userId2;
-    this.status = status || 'accepted'; // 'pending', 'accepted', 'blocked'
+    this.status = status || 'pending'; // 'pending', 'accepted', 'blocked'
+    this.requestSentBy = requestSentBy; // UID của người gửi yêu cầu
     this.createdAt = createdAt || new Date().toISOString();
   }
 
   /**
-   * Tạo ID duy nhất từ 2 User ID để tránh trùng lặp quan hệ (A-B và B-A)
+   * Tạo ID duy nhất từ 2 User ID để tránh trùng lặp quan hệ
    */
   static generateId(uid1, uid2) {
     return [uid1, uid2].sort().join('_');
@@ -27,6 +28,7 @@ export class FriendUser {
       userId1: this.userId1,
       userId2: this.userId2,
       status: this.status,
+      requestSentBy: this.requestSentBy,
       createdAt: this.createdAt,
     };
   }
