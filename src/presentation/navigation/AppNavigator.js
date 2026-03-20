@@ -1,11 +1,12 @@
 import React from 'react';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Map, Users, User, LogIn } from 'lucide-react-native';
+import { Map, Users, User } from 'lucide-react-native';
 
-// Import Screens (Placeholder for now)
-import LoginScreen from '../screens/auth/LoginScreen';
-import RegisterScreen from '../screens/auth/RegisterScreen';
+// Import Screens
+import LoginScreen from '../screens/Auth/LoginScreen';
+import RegisterScreen from '../screens/Auth/RegisterScreen';
+import ForgotPasswordScreen from '../screens/Auth/ForgotPasswordScreen';
 import MapScreen from '../screens/main/MapScreen';
 import FriendsListScreen from '../screens/main/FriendsListScreen';
 import ProfileScreen from '../screens/main/ProfileScreen';
@@ -60,6 +61,7 @@ export default function AppNavigator({ isAuthenticated }) {
         <>
           <Stack.Screen name="Login" component={LoginScreen} />
           <Stack.Screen name="Register" component={RegisterScreen} />
+          <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
         </>
       ) : (
         <Stack.Screen name="Main" component={MainTabNavigator} />

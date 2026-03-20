@@ -1,9 +1,30 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image } from 'react-native';
-import { Settings, Edit2, MapPin, Navigation, Plus } from 'lucide-react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { Settings, Edit2, MapPin, Navigation, Plus, LogOut } from 'lucide-react-native';
+import { authService } from '../../../infrastructure/firebase/authService';
 
 const ProfileScreen = () => {
+  const handleLogout = () => {
+    Alert.alert(
+      "Đăng xuất",
+      "Bạn có chắc chắn muốn đăng xuất không?",
+      [
+        { text: "Hủy", style: "cancel" },
+        {
+          text: "Đăng xuất",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await authService.logout();
+            } catch (error) {
+              Alert.alert("Lỗi", "Không thể đăng xuất. Vui lòng thử lại.");
+            }
+          }
+        }
+      ]
+    );
+  };
+
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
@@ -52,6 +73,13 @@ const ProfileScreen = () => {
             <Text style={styles.statValue}>45</Text>
             <Text style={styles.statLabel}>Places Visited</Text>
         </View>
+      </View>
+
+      <View style={styles.menuContainer}>
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+            <LogOut color="#EF4444" size={20} style={styles.menuIcon} />
+            <Text style={styles.logoutText}>Log Out</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.footer}>
@@ -162,7 +190,7 @@ const styles = StyleSheet.create({
       flexDirection: 'row',
       paddingHorizontal: 20,
       gap: 15,
-      marginBottom: 30,
+      marginBottom: 20,
   },
   statCard: {
       flex: 1,
@@ -186,6 +214,27 @@ const styles = StyleSheet.create({
       color: '#64748B',
       fontSize: 12,
       textAlign: 'center',
+  },
+  menuContainer: {
+    paddingHorizontal: 20,
+    marginBottom: 30,
+  },
+  logoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1E293B',
+    padding: 16,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  menuIcon: {
+    marginRight: 12,
+  },
+  logoutText: {
+    color: '#EF4444',
+    fontSize: 16,
+    fontWeight: '600',
   },
   footer: {
       alignItems: 'center',
