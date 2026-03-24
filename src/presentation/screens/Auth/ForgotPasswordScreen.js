@@ -1,8 +1,61 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Alert, ActivityIndicator } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import {
+  View, Text, StyleSheet, TextInput, TouchableOpacity,
+  KeyboardAvoidingView, Platform, Alert, ActivityIndicator,
+  Animated, Dimensions,
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Mail, Lock, ArrowLeft, KeyRound } from 'lucide-react-native';
 import { authService } from '../../../infrastructure/firebase/authService';
+
+const { height: SCREEN_H } = Dimensions.get('window');
+
+function Blobs() {
+  return (
+    <>
+      <View style={[s.blob, { top: -60, right: -60, width: 200, height: 200, backgroundColor: 'rgba(232,72,229,0.18)' }]} />
+      <View style={[s.blob, { top: SCREEN_H * 0.25, left: -80, width: 160, height: 160, backgroundColor: 'rgba(139,92,246,0.15)' }]} />
+      <View style={[s.blob, { bottom: 80, right: -50, width: 180, height: 180, backgroundColor: 'rgba(236,72,153,0.12)' }]} />
+    </>
+  );
+}
+
+function GlassInput({ icon, placeholder, value, onChangeText, secureTextEntry, keyboardType, autoCapitalize, maxLength }) {
+  const [focused, setFocused] = useState(false);
+  const borderAnim = useRef(new Animated.Value(0)).current;
+
+  const onFocus = () => {
+    setFocused(true);
+    Animated.timing(borderAnim, { toValue: 1, duration: 200, useNativeDriver: false }).start();
+  };
+  const onBlur = () => {
+    setFocused(false);
+    Animated.timing(borderAnim, { toValue: 0, duration: 200, useNativeDriver: false }).start();
+  };
+
+  const borderColor = borderAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['rgba(255,255,255,0.1)', 'rgba(232,72,229,0.7)'],
+  });
+
+  return (
+    <Animated.View style={[s.inputBox, { borderColor }]}>
+      <Text style={s.inputIcon}>{icon}</Text>
+      <TextInput
+        style={s.inputText}
+        placeholder={placeholder}
+        placeholderTextColor="rgba(255,255,255,0.35)"
+        value={value}
+        onChangeText={onChangeText}
+        secureTextEntry={secureTextEntry}
+        keyboardType={keyboardType || 'default'}
+        autoCapitalize={autoCapitalize || 'none'}
+        maxLength={maxLength}
+        onFocus={onFocus}
+        onBlur={onBlur}
+      />
+    </Animated.View>
+  );
+}
 
 const ForgotPasswordScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
@@ -11,6 +64,16 @@ const ForgotPasswordScreen = ({ navigation }) => {
   const [step, setStep] = useState(1); // 1: Email, 2: OTP & New Password
   const [loading, setLoading] = useState(false);
 
+  const slideUp = useRef(new Animated.Value(40)).current;
+  const fadeIn = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(slideUp, { toValue: 0, duration: 600, useNativeDriver: true }),
+      Animated.timing(fadeIn, { toValue: 1, duration: 600, useNativeDriver: true }),
+    ]).start();
+  }, []);
+
   const handleRequestOTP = async () => {
     if (!email) {
       Alert.alert("Lỗi", "Vui lòng nhập email của bạn");
@@ -18,7 +81,6 @@ const ForgotPasswordScreen = ({ navigation }) => {
     }
     setLoading(true);
     try {
-      // Gọi service gửi OTP qua email (Cần cấu hình emailjs như đã thảo luận)
       await authService.requestPasswordResetOTP(email);
       Alert.alert("Thành công", "Mã OTP đã được gửi đến email của bạn.");
       setStep(2);
@@ -36,8 +98,6 @@ const ForgotPasswordScreen = ({ navigation }) => {
     }
     setLoading(true);
     try {
-      // Logic: 1. Kiểm tra OTP từ Firestore, 2. Cập nhật mật khẩu mới
-      // Giả sử verifyOTPAndReset đã được định nghĩa trong authService
       await authService.verifyOTPAndReset(email, otp, newPassword);
       Alert.alert("Thành công", "Mật khẩu đã được thay đổi!", [
         { text: "Đăng nhập ngay", onPress: () => navigation.navigate('Login') }
@@ -50,117 +110,124 @@ const ForgotPasswordScreen = ({ navigation }) => {
   };
 
   return (
-    <LinearGradient colors={['#0F172A', '#1E293B']} style={styles.container}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.content}>
+    <View style={s.root}>
+      <LinearGradient colors={['#0D0D1A', '#12001A', '#0D0D1A']} style={StyleSheet.absoluteFill} />
+      <Blobs />
 
-        <TouchableOpacity style={styles.backButton} onPress={() => step === 1 ? navigation.goBack() : setStep(1)}>
-            <ArrowLeft color="#F8FAFC" size={24} />
-        </TouchableOpacity>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.kav}>
+        <Animated.View style={[s.content, { transform: [{ translateY: slideUp }], opacity: fadeIn }]}>
+          
+          <TouchableOpacity style={s.backBtn} onPress={() => step === 1 ? navigation.goBack() : setStep(1)}>
+              <Text style={{color: '#FFF', fontSize: 24}}>←</Text>
+          </TouchableOpacity>
 
-        <View style={styles.header}>
-            <View style={styles.logoContainer}>
-                <KeyRound color="#38BDF8" size={40} />
-            </View>
-            <Text style={styles.title}>{step === 1 ? 'Forgot Password' : 'Reset Password'}</Text>
-            <Text style={styles.subtitle}>
-              {step === 1
-                ? 'Enter your email to receive a 6-digit verification code'
-                : `Enter the code sent to ${email}`}
+          <View style={s.header}>
+            <LinearGradient colors={['#E848E5', '#8B5CF6']} style={s.logoGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+              <Text style={s.logoEmoji}>🔑</Text>
+            </LinearGradient>
+            <Text style={s.appName}>GeoLink</Text>
+            <Text style={s.tagline}>
+              {step === 1 ? 'Khôi phục mật khẩu của bạn' : 'Thiết lập mật khẩu mới'}
             </Text>
-        </View>
+          </View>
 
-        <View style={styles.form}>
+          <View style={s.card}>
+            <Text style={s.cardTitle}>{step === 1 ? 'Email xác thực' : 'Mật khẩu mới'}</Text>
+            
             {step === 1 ? (
               <>
-                <View style={styles.inputContainer}>
-                    <Mail color="#64748B" size={20} style={styles.inputIcon} />
-                    <TextInput
-                        placeholder="Email Address"
-                        placeholderTextColor="#64748B"
-                        style={styles.input}
-                        keyboardType="email-address"
-                        value={email}
-                        onChangeText={setEmail}
-                        autoCapitalize="none"
-                    />
-                </View>
-
+                <GlassInput icon="✉️" placeholder="Nhập email của bạn" value={email} onChangeText={setEmail} keyboardType="email-address" />
+                
                 <TouchableOpacity
-                  style={[styles.actionButton, loading && { opacity: 0.7 }]}
+                  style={[s.primaryBtn, loading && { opacity: 0.7 }]}
                   onPress={handleRequestOTP}
                   disabled={loading}
+                  activeOpacity={0.85}
                 >
-                    {loading ? <ActivityIndicator color="#0F172A" /> : <Text style={styles.buttonText}>Send Code</Text>}
+                  <LinearGradient colors={['#E848E5', '#8B5CF6']} style={s.primaryBtnGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+                    {loading ? <ActivityIndicator color="#FFF" /> : <Text style={s.primaryBtnText}>Gửi mã xác thực →</Text>}
+                  </LinearGradient>
                 </TouchableOpacity>
               </>
             ) : (
               <>
-                <View style={styles.inputContainer}>
-                    <KeyRound color="#64748B" size={20} style={styles.inputIcon} />
-                    <TextInput
-                        placeholder="6-Digit OTP"
-                        placeholderTextColor="#64748B"
-                        style={styles.input}
-                        keyboardType="number-pad"
-                        maxLength={6}
-                        value={otp}
-                        onChangeText={setOtp}
-                    />
-                </View>
-
-                <View style={styles.inputContainer}>
-                    <Lock color="#64748B" size={20} style={styles.inputIcon} />
-                    <TextInput
-                        placeholder="New Password"
-                        placeholderTextColor="#64748B"
-                        style={styles.input}
-                        secureTextEntry
-                        value={newPassword}
-                        onChangeText={setNewPassword}
-                    />
-                </View>
+                <GlassInput icon="🔐" placeholder="Mã OTP 6 chữ số" value={otp} onChangeText={setOtp} keyboardType="number-pad" maxLength={6} />
+                <GlassInput icon="🔒" placeholder="Mật khẩu mới" value={newPassword} onChangeText={setNewPassword} secureTextEntry />
 
                 <TouchableOpacity
-                  style={[styles.actionButton, loading && { opacity: 0.7 }]}
+                  style={[s.primaryBtn, loading && { opacity: 0.7 }]}
                   onPress={handleResetPassword}
                   disabled={loading}
+                  activeOpacity={0.85}
                 >
-                    {loading ? <ActivityIndicator color="#0F172A" /> : <Text style={styles.buttonText}>Reset Password</Text>}
+                  <LinearGradient colors={['#E848E5', '#8B5CF6']} style={s.primaryBtnGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+                    {loading ? <ActivityIndicator color="#FFF" /> : <Text style={s.primaryBtnText}>Đổi mật khẩu</Text>}
+                  </LinearGradient>
                 </TouchableOpacity>
               </>
             )}
-        </View>
+          </View>
 
+          <View style={s.footerRow}>
+            <Text style={s.footerGray}>Quay lại </Text>
+            <TouchableOpacity onPress={() => navigation.navigate('Login')}>
+              <Text style={s.footerPink}>Đăng nhập</Text>
+            </TouchableOpacity>
+          </View>
+
+        </Animated.View>
       </KeyboardAvoidingView>
-    </LinearGradient>
+    </View>
   );
 };
 
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  content: { flex: 1, paddingHorizontal: 30, justifyContent: 'center' },
-  backButton: { position: 'absolute', top: 60, left: 20, padding: 10 },
-  header: { alignItems: 'center', marginBottom: 40 },
-  logoContainer: {
-    width: 80, height: 80, borderRadius: 40, backgroundColor: '#1E293B',
-    justifyContent: 'center', alignItems: 'center', marginBottom: 20,
-    borderWidth: 1, borderColor: '#334155',
+const s = StyleSheet.create({
+  root: { flex: 1 },
+  kav: { flex: 1 },
+  content: { flex: 1, paddingHorizontal: 24, justifyContent: 'center' },
+  backBtn: { position: 'absolute', top: 50, left: 0, padding: 10, zIndex: 10 },
+  blob: { position: 'absolute', borderRadius: 999 },
+  
+  header: { alignItems: 'center', marginBottom: 32 },
+  logoGrad: {
+    width: 68, height: 68, borderRadius: 22,
+    justifyContent: 'center', alignItems: 'center',
+    marginBottom: 12,
+    elevation: 10, shadowColor: '#E848E5',
+    shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.5, shadowRadius: 14,
   },
-  title: { fontSize: 26, fontWeight: 'bold', color: '#F8FAFC', marginBottom: 10 },
-  subtitle: { fontSize: 15, color: '#94A3B8', textAlign: 'center' },
-  form: { width: '100%' },
-  inputContainer: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: '#1E293B',
-    borderRadius: 16, marginBottom: 16, paddingHorizontal: 16, height: 56,
-    borderWidth: 1, borderColor: '#334155',
+  logoEmoji: { fontSize: 28 },
+  appName: { color: '#FFFFFF', fontSize: 26, fontWeight: '900', letterSpacing: 1 },
+  tagline: { color: 'rgba(255,255,255,0.45)', fontSize: 13, marginTop: 4, textAlign: 'center' },
+
+  card: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 28, padding: 22,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
+    marginBottom: 20,
   },
-  inputIcon: { marginRight: 12 },
-  input: { flex: 1, color: '#F8FAFC', fontSize: 16 },
-  actionButton: {
-    backgroundColor: '#38BDF8', height: 56, borderRadius: 16,
-    justifyContent: 'center', alignItems: 'center', marginTop: 10,
+  cardTitle: { color: '#FFF', fontSize: 20, fontWeight: '800', marginBottom: 20 },
+
+  inputBox: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderRadius: 14, borderWidth: 1.5,
+    paddingHorizontal: 14, height: 52, marginBottom: 12,
   },
-  buttonText: { color: '#0F172A', fontSize: 18, fontWeight: 'bold' },
+  inputIcon: { fontSize: 17, marginRight: 10 },
+  inputText: { flex: 1, color: '#FFF', fontSize: 15 },
+
+  primaryBtn: {
+    borderRadius: 16, overflow: 'hidden', marginTop: 10,
+    elevation: 8, shadowColor: '#E848E5',
+    shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.5, shadowRadius: 12,
+  },
+  primaryBtnGrad: { height: 54, justifyContent: 'center', alignItems: 'center' },
+  primaryBtnText: { color: '#FFF', fontSize: 16, fontWeight: '800' },
+
+  footerRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 20 },
+  footerGray: { color: 'rgba(255,255,255,0.45)', fontSize: 14 },
+  footerPink: { color: '#E848E5', fontSize: 14, fontWeight: '700' },
 });
 
 export default ForgotPasswordScreen;

@@ -1,5 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
+import { getDatabase } from "firebase/database";
 import {
   initializeAuth,
   getReactNativePersistence
@@ -18,7 +19,8 @@ const firebaseConfig = {
   storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
   appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
-  measurementId: process.env.EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID
+  measurementId: process.env.EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID,
+  databaseURL: process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL || "https://bump-b0d38-default-rtdb.firebaseio.com",
 };
 
 // Initialize Firebase
@@ -32,4 +34,7 @@ export const auth = initializeAuth(app, {
 // Initialize Firestore
 export const db = getFirestore(app);
 
-export default app;
+// Initialize Realtime Database
+export const rtdb = getDatabase(app);
+
+export default app;

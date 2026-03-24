@@ -1,235 +1,244 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Alert, ActivityIndicator } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import {
+  View, Text, StyleSheet, TextInput, TouchableOpacity,
+  KeyboardAvoidingView, Platform, Alert, ActivityIndicator,
+  Animated, Dimensions,
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { LogIn, Mail, Lock } from 'lucide-react-native';
 import { authService } from '../../../infrastructure/firebase/authService';
 
+const { height: SCREEN_H } = Dimensions.get('window');
+
+// ── Floating decorative blobs ──────────────────────────────────────────────
+function Blobs() {
+  return (
+    <>
+      <View style={[styles.blob, { top: -60, right: -60, width: 200, height: 200, backgroundColor: 'rgba(232,72,229,0.18)' }]} />
+      <View style={[styles.blob, { top: SCREEN_H * 0.25, left: -80, width: 160, height: 160, backgroundColor: 'rgba(139,92,246,0.15)' }]} />
+      <View style={[styles.blob, { bottom: 80, right: -50, width: 180, height: 180, backgroundColor: 'rgba(236,72,153,0.12)' }]} />
+    </>
+  );
+}
+
+// ── Input Field ───────────────────────────────────────────────────────────
+function GlassInput({ icon, placeholder, value, onChangeText, secureTextEntry, keyboardType, autoCapitalize }) {
+  const [focused, setFocused] = useState(false);
+  const borderAnim = useRef(new Animated.Value(0)).current;
+
+  const onFocus = () => {
+    setFocused(true);
+    Animated.timing(borderAnim, { toValue: 1, duration: 200, useNativeDriver: false }).start();
+  };
+  const onBlur = () => {
+    setFocused(false);
+    Animated.timing(borderAnim, { toValue: 0, duration: 200, useNativeDriver: false }).start();
+  };
+
+  const borderColor = borderAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['rgba(255,255,255,0.1)', 'rgba(232,72,229,0.7)'],
+  });
+
+  return (
+    <Animated.View style={[styles.inputBox, { borderColor }]}>
+      <Text style={styles.inputIcon}>{icon}</Text>
+      <TextInput
+        style={styles.inputText}
+        placeholder={placeholder}
+        placeholderTextColor="rgba(255,255,255,0.35)"
+        value={value}
+        onChangeText={onChangeText}
+        secureTextEntry={secureTextEntry}
+        keyboardType={keyboardType || 'default'}
+        autoCapitalize={autoCapitalize || 'none'}
+        onFocus={onFocus}
+        onBlur={onBlur}
+      />
+    </Animated.View>
+  );
+}
+
+// ── Main LoginScreen ──────────────────────────────────────────────────────
 const LoginScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Entry animation
+  const slideUp = useRef(new Animated.Value(40)).current;
+  const fadeIn = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(slideUp, { toValue: 0, duration: 600, useNativeDriver: true }),
+      Animated.timing(fadeIn, { toValue: 1, duration: 600, useNativeDriver: true }),
+    ]).start();
+  }, []);
+
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert("Lỗi", "Vui lòng nhập đầy đủ email và mật khẩu");
+      Alert.alert('Lỗi', 'Vui lòng nhập đầy đủ email và mật khẩu');
       return;
     }
-
     setLoading(true);
     try {
       await authService.login(email, password);
-      // Navigation is handled in App.js by auth state listener
     } catch (error) {
-      Alert.alert("Đăng nhập thất bại", error.message);
+      Alert.alert('Đăng nhập thất bại', error.message);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <LinearGradient colors={['#0F172A', '#1E293B']} style={styles.container}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.content}>
-        
-        <View style={styles.header}>
-            <View style={styles.logoContainer}>
-                <LogIn color="#38BDF8" size={40} />
-            </View>
-            <Text style={styles.title}>Welcome Back!</Text>
-            <Text style={styles.subtitle}>Connect with your world on Bump</Text>
-        </View>
+    <View style={styles.root}>
+      {/* Dark background */}
+      <LinearGradient colors={['#0D0D1A', '#12001A', '#0D0D1A']} style={StyleSheet.absoluteFill} />
+      <Blobs />
 
-        <View style={styles.form}>
-            <View style={styles.inputContainer}>
-                <Mail color="#64748B" size={20} style={styles.inputIcon} />
-                <TextInput 
-                    placeholder="Email" 
-                    placeholderTextColor="#64748B"
-                    style={styles.input}
-                    keyboardType="email-address"
-                    value={email}
-                    onChangeText={setEmail}
-                    autoCapitalize="none"
-                />
-            </View>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.kav}>
+        <Animated.View style={[styles.content, { transform: [{ translateY: slideUp }], opacity: fadeIn }]}>
 
-            <View style={styles.inputContainer}>
-                <Lock color="#64748B" size={20} style={styles.inputIcon} />
-                <TextInput 
-                    placeholder="Password" 
-                    placeholderTextColor="#64748B"
-                    style={styles.input}
-                    secureTextEntry
-                    value={password}
-                    onChangeText={setPassword}
-                />
-            </View>
+          {/* Logo */}
+          <View style={styles.logoWrap}>
+            <LinearGradient colors={['#E848E5', '#8B5CF6']} style={styles.logoGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+              <Text style={styles.logoEmoji}>📍</Text>
+            </LinearGradient>
+            <Text style={styles.appName}>GeoLink</Text>
+            <Text style={styles.tagline}>Chia sẻ vị trí với bạn bè realtime</Text>
+          </View>
+
+          {/* Card */}
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Đăng nhập</Text>
+
+            <GlassInput icon="✉️" placeholder="Email" value={email} onChangeText={setEmail} keyboardType="email-address" />
+            <GlassInput icon="🔒" placeholder="Mật khẩu" value={password} onChangeText={setPassword} secureTextEntry />
 
             <TouchableOpacity
-              style={styles.forgotPassword}
+              style={styles.forgotBtn}
               onPress={() => navigation.navigate('ForgotPassword')}
             >
-                <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+              <Text style={styles.forgotText}>Quên mật khẩu?</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity 
-              style={[styles.loginButton, loading && { opacity: 0.7 }]} 
+            {/* Primary button */}
+            <TouchableOpacity
+              style={[styles.primaryBtn, loading && { opacity: 0.7 }]}
               onPress={handleLogin}
               disabled={loading}
+              activeOpacity={0.85}
             >
-                {loading ? (
-                  <ActivityIndicator color="#0F172A" />
-                ) : (
-                  <Text style={styles.loginButtonText}>Log In</Text>
-                )}
+              <LinearGradient colors={['#E848E5', '#8B5CF6']} style={styles.primaryBtnGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+                {loading
+                  ? <ActivityIndicator color="#FFF" />
+                  : <Text style={styles.primaryBtnText}>Đăng nhập →</Text>}
+              </LinearGradient>
             </TouchableOpacity>
 
-            <View style={styles.dividerContainer}>
-                <View style={styles.divider} />
-                <Text style={styles.dividerText}>OR CONTINUE WITH</Text>
-                <View style={styles.divider} />
+            {/* Divider */}
+            <View style={styles.divRow}>
+              <View style={styles.divLine} />
+              <Text style={styles.divText}>hoặc tiếp tục với</Text>
+              <View style={styles.divLine} />
             </View>
 
-            <View style={styles.socialButtons}>
-                 {/* Placeholder icons for Google, Apple, Facebook */}
-                <TouchableOpacity style={styles.socialButton}><Text style={{color: '#fff'}}>G</Text></TouchableOpacity>
-                <TouchableOpacity style={styles.socialButton}><Text style={{color: '#fff'}}>A</Text></TouchableOpacity>
-                <TouchableOpacity style={styles.socialButton}><Text style={{color: '#fff'}}>F</Text></TouchableOpacity>
-            </View>
-
-            <View style={styles.footer}>
-                <Text style={styles.footerText}>Don't have an account? </Text>
-                <TouchableOpacity onPress={() => navigation.navigate('Register')}>
-                    <Text style={styles.signUpLink}>Sign up</Text>
+            {/* Social */}
+            <View style={styles.socialRow}>
+              {['🍎', '🌐', 'f'].map((ic, i) => (
+                <TouchableOpacity key={i} style={styles.socialBtn}>
+                  <Text style={{ fontSize: 18 }}>{ic}</Text>
                 </TouchableOpacity>
+              ))}
             </View>
-        </View>
+          </View>
 
+          {/* Footer */}
+          <View style={styles.footerRow}>
+            <Text style={styles.footerGray}>Chưa có tài khoản? </Text>
+            <TouchableOpacity onPress={() => navigation.navigate('Register')}>
+              <Text style={styles.footerPink}>Đăng ký ngay</Text>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
       </KeyboardAvoidingView>
-    </LinearGradient>
+    </View>
   );
 };
 
+// ─── Styles ────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
+  root: { flex: 1 },
+  kav: { flex: 1 },
+  content: { flex: 1, paddingHorizontal: 24, justifyContent: 'center', paddingTop: 40 },
+
+  // Blobs
+  blob: { position: 'absolute', borderRadius: 999 },
+
+  // Logo
+  logoWrap: { alignItems: 'center', marginBottom: 32 },
+  logoGrad: {
+    width: 72, height: 72, borderRadius: 24,
+    justifyContent: 'center', alignItems: 'center',
+    marginBottom: 12,
+    elevation: 10,
+    shadowColor: '#E848E5',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5, shadowRadius: 16,
   },
-  content: {
-    flex: 1,
-    paddingHorizontal: 30,
-    justifyContent: 'center',
-  },
-  header: {
-    alignItems: 'center',
-    marginBottom: 40,
-  },
-  logoContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#1E293B',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 20,
+  logoEmoji: { fontSize: 32 },
+  appName: { color: '#FFFFFF', fontSize: 28, fontWeight: '900', letterSpacing: 1 },
+  tagline: { color: 'rgba(255,255,255,0.45)', fontSize: 13, marginTop: 4 },
+
+  // Card
+  card: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 28,
+    padding: 24,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: 'rgba(255,255,255,0.08)',
   },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#F8FAFC',
-    marginBottom: 10,
+  cardTitle: { color: '#FFF', fontSize: 22, fontWeight: '800', marginBottom: 20 },
+
+  // Input
+  inputBox: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderRadius: 14,
+    borderWidth: 1.5,
+    paddingHorizontal: 14,
+    height: 54,
+    marginBottom: 14,
   },
-  subtitle: {
-    fontSize: 16,
-    color: '#94A3B8',
+  inputIcon: { fontSize: 18, marginRight: 10 },
+  inputText: { flex: 1, color: '#FFF', fontSize: 15 },
+
+  // Forgot
+  forgotBtn: { alignSelf: 'flex-end', marginBottom: 20 },
+  forgotText: { color: '#E848E5', fontSize: 13, fontWeight: '600' },
+
+  // Primary button
+  primaryBtn: { borderRadius: 16, overflow: 'hidden', marginBottom: 22, elevation: 8, shadowColor: '#E848E5', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.5, shadowRadius: 12 },
+  primaryBtnGrad: { height: 54, justifyContent: 'center', alignItems: 'center' },
+  primaryBtnText: { color: '#FFF', fontSize: 17, fontWeight: '800', letterSpacing: 0.5 },
+
+  // Divider
+  divRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 18 },
+  divLine: { flex: 1, height: 1, backgroundColor: 'rgba(255,255,255,0.1)' },
+  divText: { color: 'rgba(255,255,255,0.35)', fontSize: 12, paddingHorizontal: 12 },
+
+  // Social
+  socialRow: { flexDirection: 'row', justifyContent: 'center', gap: 16 },
+  socialBtn: {
+    width: 52, height: 52, borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
+    justifyContent: 'center', alignItems: 'center',
   },
-  form: {
-    width: '100%',
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1E293B',
-    borderRadius: 16,
-    marginBottom: 16,
-    paddingHorizontal: 16,
-    height: 56,
-    borderWidth: 1,
-    borderColor: '#334155',
-  },
-  inputIcon: {
-    marginRight: 12,
-  },
-  input: {
-    flex: 1,
-    color: '#F8FAFC',
-    fontSize: 16,
-  },
-  forgotPassword: {
-    alignSelf: 'flex-end',
-    marginBottom: 24,
-  },
-  forgotPasswordText: {
-    color: '#38BDF8',
-    fontSize: 14,
-  },
-  loginButton: {
-    backgroundColor: '#38BDF8',
-    height: 56,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  loginButtonText: {
-    color: '#0F172A',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  dividerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  divider: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#334155',
-  },
-  dividerText: {
-    color: '#64748B',
-    paddingHorizontal: 16,
-    fontSize: 12,
-  },
-  socialButtons: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 16,
-    marginBottom: 24,
-  },
-  socialButton: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#1E293B',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#334155',
-  },
-  footer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-  },
-  footerText: {
-    color: '#94A3B8',
-    fontSize: 14,
-  },
-  signUpLink: {
-    color: '#38BDF8',
-    fontSize: 14,
-    fontWeight: 'bold',
-  }
+
+  // Footer
+  footerRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 24 },
+  footerGray: { color: 'rgba(255,255,255,0.45)', fontSize: 14 },
+  footerPink: { color: '#E848E5', fontSize: 14, fontWeight: '700' },
 });
 
 export default LoginScreen;

@@ -4,6 +4,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Map, Users, User } from 'lucide-react-native';
 
 // Import Screens
+import WelcomeScreen from '../screens/Auth/WelcomeScreen';
 import LoginScreen from '../screens/Auth/LoginScreen';
 import RegisterScreen from '../screens/Auth/RegisterScreen';
 import ForgotPasswordScreen from '../screens/Auth/ForgotPasswordScreen';
@@ -21,13 +22,15 @@ function MainTabNavigator() {
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: '#0F172A',
-          borderTopWidth: 0,
-          height: 60,
-          paddingBottom: 10,
+          backgroundColor: '#0D0D1A',
+          borderTopWidth: 1,
+          borderTopColor: 'rgba(255,255,255,0.05)',
+          height: 70,
+          paddingBottom: 20,
+          paddingTop: 10,
         },
-        tabBarActiveTintColor: '#38BDF8',
-        tabBarInactiveTintColor: '#64748B',
+        tabBarActiveTintColor: '#E848E5',
+        tabBarInactiveTintColor: 'rgba(255,255,255,0.4)',
       }}
     >
       <Tab.Screen 
@@ -35,6 +38,8 @@ function MainTabNavigator() {
         component={MapScreen} 
         options={{
           tabBarIcon: ({ color, size }) => <Map color={color} size={size} />,
+          tabBarLabel: 'Khám phá',
+          tabBarStyle: { display: 'none' } // Ẩn tab bar mặc định vì đã có thanh Floating ở MapScreen
         }}
       />
       <Tab.Screen 
@@ -42,6 +47,7 @@ function MainTabNavigator() {
         component={FriendsListScreen} 
         options={{
           tabBarIcon: ({ color, size }) => <Users color={color} size={size} />,
+          tabBarLabel: 'Bạn bè'
         }}
       />
       <Tab.Screen 
@@ -49,6 +55,7 @@ function MainTabNavigator() {
         component={ProfileScreen} 
         options={{
           tabBarIcon: ({ color, size }) => <User color={color} size={size} />,
+          tabBarLabel: 'Tôi'
         }}
       />
     </Tab.Navigator>
@@ -60,6 +67,7 @@ export default function AppNavigator({ isAuthenticated }) {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       {!isAuthenticated ? (
         <>
+          <Stack.Screen name="Welcome" component={WelcomeScreen} />
           <Stack.Screen name="Login" component={LoginScreen} />
           <Stack.Screen name="Register" component={RegisterScreen} />
           <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
