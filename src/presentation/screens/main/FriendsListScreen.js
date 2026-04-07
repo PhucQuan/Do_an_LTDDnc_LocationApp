@@ -48,8 +48,21 @@ const FriendsListScreen = ({ navigation }) => {
       }
     });
 
-    const unsubGroups = chatService.subscribeToUserGroups(currentUid, (userGroups) => {
-      setGroups(userGroups);
+    const unsubGroups = chatService.subscribeToUserGroups(currentUid, async (userGroups) => {
+      // Resolve names for direct chats
+      const resolvedGroups = await Promise.all(userGroups.map(async (group) => {
+        if (group.isDirect) {
+          const otherUid = group.members.find(uid => uid !== currentUid);
+          if (otherUid) {
+            const userSnap = await getDoc(doc(db, "users", otherUid));
+            if (userSnap.exists()) {
+              return { ...group, name: userSnap.data().name };
+            }
+          }
+        }
+        return group;
+      }));
+      setGroups(resolvedGroups);
     });
 
     const unsubRequests = friendService.subscribeToPendingRequests(currentUid, (requests) => {
@@ -152,39 +165,66 @@ const FriendsListScreen = ({ navigation }) => {
   );
 
   const FriendItem = ({ item }) => (
-    <TouchableOpacity style={styles.friendItem}>
+    <View style={styles.friendItem}>
       <View style={styles.avatar}>
           <Text style={styles.avatarText}>{item.name ? item.name[0] : '?'}</Text>
           <View style={[styles.statusDot, { backgroundColor: item.isGhostMode ? '#94A3B8' : '#10B981' }]} />
       </View>
       <View style={styles.friendInfo}>
           <Text style={styles.friendName}>{item.name}</Text>
-          <Text style={styles.friendStatus}>{item.email}</Text>
       </View>
-    </TouchableOpacity>
-  );
-
-  const GroupItem = ({ item }) => (
-    <View style={styles.friendItem}>
-      <TouchableOpacity
-        style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}
-      >
-        <View style={[styles.avatar, { backgroundColor: '#1E293B' }]}>
-          <Users color="#38BDF8" size={24} />
-        </View>
-        <View style={styles.friendInfo}>
-          <Text style={styles.friendName}>{item.name}</Text>
-          <Text style={styles.friendStatus}>{item.members.length} thành viên</Text>
-        </View>
-      </TouchableOpacity>
-      <TouchableOpacity
-        style={styles.leaveBtn}
-        onPress={() => handleLeaveGroup(item.id)}
-      >
-        <LogOut color="#EF4444" size={20} />
-      </TouchableOpacity>
     </View>
   );
+
+  const GroupItem = ({ item }) => {
+    const [unreadCount, setUnreadCount] = useState(0);
+    const currentUid = auth.currentUser.uid;
+
+    useEffect(() => {
+      const unsubscribe = chatService.subscribeToUnreadCount(item.id, currentUid, (count) => {
+        setUnreadCount(count);
+      });
+      return () => unsubscribe();
+    }, [item.id]);
+
+    return (
+      <View style={styles.friendItem}>
+        <TouchableOpacity
+          style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}
+          onPress={() => navigation.navigate('Chat', { chatId: item.id, title: item.name, isGroup: !item.isDirect })}
+        >
+          <View style={[styles.avatar, { backgroundColor: '#1E293B' }]}>
+            {item.isDirect ? (
+              <Text style={styles.avatarText}>{item.name ? item.name[0] : '?'}</Text>
+            ) : (
+              <Users color="#38BDF8" size={24} />
+            )}
+          </View>
+          <View style={styles.friendInfo}>
+            <Text style={styles.friendName}>{item.name}</Text>
+            <Text style={[styles.friendStatus, unreadCount > 0 && styles.unreadText]} numberOfLines={1}>
+              {item.lastMessage ?
+                `${item.lastMessage.senderName}: ${item.lastMessage.text}` :
+                'Bắt đầu trò chuyện...'}
+            </Text>
+          </View>
+          {unreadCount > 0 && (
+            <View style={styles.unreadBadge}>
+              <Text style={styles.unreadBadgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+        {!item.isDirect && (
+          <TouchableOpacity
+            style={styles.leaveBtn}
+            onPress={() => handleLeaveGroup(item.id)}
+          >
+            <LogOut color="#EF4444" size={20} />
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -248,7 +288,7 @@ const FriendsListScreen = ({ navigation }) => {
 
         {groups.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Nhóm của tôi ({groups.length})</Text>
+            <Text style={styles.sectionTitle}>Trò chuyện ({groups.length})</Text>
             {groups.map(group => (
               <GroupItem key={group.id} item={group} />
             ))}
@@ -328,7 +368,10 @@ const styles = StyleSheet.create({
   friendName: { color: '#F8FAFC', fontSize: 17, fontWeight: 'bold', marginBottom: 2 },
   friendStatus: { color: '#94A3B8', fontSize: 13 },
   emptyText: { color: '#64748B', textAlign: 'center', marginTop: 20, fontSize: 14, paddingHorizontal: 40 },
-  leaveBtn: { padding: 10, backgroundColor: 'rgba(239, 68, 68, 0.1)', borderRadius: 12 }
+  leaveBtn: { padding: 10, backgroundColor: 'rgba(239, 68, 68, 0.1)', borderRadius: 12 },
+  unreadBadge: { backgroundColor: '#38BDF8', minWidth: 20, height: 20, borderRadius: 10, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 6, marginLeft: 10 },
+  unreadBadgeText: { color: '#0F172A', fontSize: 11, fontWeight: 'bold' },
+  unreadText: { color: '#F8FAFC', fontWeight: '600' }
 });
 
 export default FriendsListScreen;

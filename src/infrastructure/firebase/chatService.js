@@ -9,9 +9,13 @@ import {
   arrayRemove,
   query,
   where,
-  onSnapshot
+  onSnapshot,
+  orderBy,
+  getDocs,
+  writeBatch
 } from "firebase/firestore";
 import { ChatGroup } from "../../domain/entities/ChatGroup";
+import { ChatMessage } from "../../domain/entities/ChatMessage";
 
 class ChatService {
   /**
@@ -34,6 +38,47 @@ class ChatService {
       return docRef.id;
     } catch (error) {
       console.error("Error creating group:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Lấy hoặc tạo cuộc hội thoại 1-1
+   */
+  async getOrCreateDirectChat(userId1, userId2) {
+    try {
+      const groupsRef = collection(db, "groups");
+      const q = query(
+        groupsRef,
+        where("members", "array-contains", userId1),
+        where("isDirect", "==", true)
+      );
+
+      const querySnapshot = await getDocs(q);
+      let chatId = null;
+
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        if (data.members.includes(userId2) && data.members.length === 2) {
+          chatId = doc.id;
+        }
+      });
+
+      if (chatId) return chatId;
+
+      // Create new direct chat
+      const newGroup = {
+        name: "Direct Chat",
+        members: [userId1, userId2],
+        isDirect: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: serverTimestamp()
+      };
+
+      const docRef = await addDoc(groupsRef, newGroup);
+      return docRef.id;
+    } catch (error) {
+      console.error("Error getOrCreateDirectChat:", error);
       throw error;
     }
   }
@@ -66,6 +111,99 @@ class ChatService {
       callback(groups);
     }, (error) => {
       console.error("Error subscribing to groups:", error);
+    });
+  }
+
+  /**
+   * Gửi tin nhắn
+   */
+  async sendMessage(groupId, text, senderId, senderName) {
+    try {
+      const messagesRef = collection(db, "groups", groupId, "messages");
+      const newMessage = {
+        text,
+        senderId,
+        senderName,
+        createdAt: serverTimestamp(),
+        readBy: [senderId] // Người gửi mặc định đã đọc
+      };
+
+      await addDoc(messagesRef, newMessage);
+
+      // Cập nhật tin nhắn cuối cho nhóm
+      const groupRef = doc(db, "groups", groupId);
+      await updateDoc(groupRef, {
+        lastMessage: {
+          text,
+          senderName,
+          sentAt: serverTimestamp()
+        },
+        updatedAt: serverTimestamp()
+      });
+    } catch (error) {
+      console.error("Error sending message:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Đánh dấu tất cả tin nhắn trong nhóm là đã đọc
+   */
+  async markAllAsRead(groupId, userId) {
+    try {
+      const messagesRef = collection(db, "groups", groupId, "messages");
+      const q = query(messagesRef, where("readBy", "not-in", [[userId]])); // Firebase doesn't support not-contains easily for arrays this way
+
+      // Lấy các tin nhắn mà user chưa đọc
+      const snapshot = await getDocs(messagesRef);
+      const batch = writeBatch(db);
+      let count = 0;
+
+      snapshot.docs.forEach(d => {
+        const data = d.data();
+        if (!data.readBy || !data.readBy.includes(userId)) {
+          batch.update(d.ref, {
+            readBy: arrayUnion(userId)
+          });
+          count++;
+        }
+      });
+
+      if (count > 0) {
+        await batch.commit();
+      }
+    } catch (error) {
+      console.error("Error marking messages as read:", error);
+    }
+  }
+
+  /**
+   * Subscribe tin nhắn realtime
+   */
+  subscribeToMessages(groupId, callback) {
+    const messagesRef = collection(db, "groups", groupId, "messages");
+    const q = query(messagesRef, orderBy("createdAt", "asc"));
+
+    return onSnapshot(q, (snapshot) => {
+      const messages = snapshot.docs.map(doc => ChatMessage.fromFirestore(doc));
+      callback(messages);
+    }, (error) => {
+      console.error("Error subscribing to messages:", error);
+    });
+  }
+
+  /**
+   * Lấy số tin nhắn chưa đọc của một nhóm
+   */
+  subscribeToUnreadCount(groupId, userId, callback) {
+    const messagesRef = collection(db, "groups", groupId, "messages");
+
+    return onSnapshot(messagesRef, (snapshot) => {
+      const unreadCount = snapshot.docs.filter(d => {
+        const data = d.data();
+        return data.senderId !== userId && (!data.readBy || !data.readBy.includes(userId));
+      }).length;
+      callback(unreadCount);
     });
   }
 }

@@ -1,7 +1,7 @@
 import { auth, db } from '../firebase/firebase';
 import { 
-  createUserWithEmailAndPassword, 
-  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
   sendPasswordResetEmail
