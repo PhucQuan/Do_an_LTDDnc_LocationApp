@@ -1,254 +1,343 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
-import { Settings, Edit2, MapPin, Navigation, Plus, LogOut } from 'lucide-react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  Alert,
+  Image,
+  ScrollView,
+  Switch,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { LogOut, MapPin, MessageCircle, Shield, Users } from 'lucide-react-native';
+import { auth, db } from '../../../infrastructure/firebase/firebase';
 import { authService } from '../../../infrastructure/firebase/authService';
+import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
+import { locationService } from '../../../infrastructure/firebase/locationService';
 
-const ProfileScreen = () => {
+function getAvatarUri(profile, currentName) {
+  return (
+    profile?.avatarUrl ||
+    auth.currentUser?.photoURL ||
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(currentName)}&background=111827&color=FFFFFF&size=256`
+  );
+}
+
+function StatCard({ label, value, accent }) {
+  return (
+    <View style={styles.statCard}>
+      <Text style={[styles.statValue, { color: accent }]}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
+  );
+}
+
+export default function ProfileScreen({ navigation }) {
+  const [profile, setProfile] = useState(null);
+  const [stats, setStats] = useState({
+    groups: 0,
+    friends: 0,
+    trails: 0,
+  });
+  const [ghostMode, setGhostMode] = useState(false);
+
+  useEffect(() => {
+    const loadProfile = async () => {
+      const uid = auth.currentUser?.uid;
+      if (!uid) {
+        return;
+      }
+
+      const userDoc = await getDoc(doc(db, 'users', uid));
+      if (userDoc.exists()) {
+        setProfile(userDoc.data());
+        setGhostMode(Boolean(userDoc.data().isGhostMode));
+      }
+
+      const groupsSnapshot = await getDocs(
+        query(collection(db, 'groups'), where('members', 'array-contains', uid))
+      );
+      const friendshipsSnapshot = await getDocs(
+        query(collection(db, 'friendships'), where('status', '==', 'accepted'))
+      );
+      const trailsSnapshot = await getDocs(
+        query(collection(db, 'locations_history'), where('uid', '==', uid))
+      );
+
+      const friendCount = friendshipsSnapshot.docs.filter((entry) => {
+        const data = entry.data();
+        return data.userId1 === uid || data.userId2 === uid;
+      }).length;
+
+      setStats({
+        groups: groupsSnapshot.size,
+        friends: friendCount,
+        trails: trailsSnapshot.size,
+      });
+    };
+
+    loadProfile();
+  }, []);
+
+  const currentName = useMemo(
+    () =>
+      profile?.name ||
+      auth.currentUser?.displayName ||
+      auth.currentUser?.email?.split('@')[0] ||
+      'You',
+    [profile?.name]
+  );
+
   const handleLogout = () => {
-    Alert.alert(
-      "Đăng xuất",
-      "Bạn có chắc chắn muốn đăng xuất không?",
-      [
-        { text: "Hủy", style: "cancel" },
-        {
-          text: "Đăng xuất",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await authService.logout();
-            } catch (error) {
-              Alert.alert("Lỗi", "Không thể đăng xuất. Vui lòng thử lại.");
-            }
+    Alert.alert('Log out', 'Do you want to leave this account?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Log out',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await authService.logout();
+          } catch (error) {
+            Alert.alert('Error', 'Could not log out. Please try again.');
           }
-        }
-      ]
-    );
+        },
+      },
+    ]);
+  };
+
+  const handleToggleGhostMode = async (value) => {
+    setGhostMode(value);
+    try {
+      await locationService.setGhostMode(value);
+      setProfile((current) => ({
+        ...(current || {}),
+        isGhostMode: value,
+      }));
+    } catch (error) {
+      setGhostMode(!value);
+      Alert.alert('Error', 'Could not update Ghost Mode right now.');
+    }
   };
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.settingsButton}>
-            <Settings color="#F8FAFC" size={24} />
-        </TouchableOpacity>
-        
-        <View style={styles.profileInfo}>
-            <View style={styles.avatarContainer}>
-                <View style={styles.avatar}>
-                    <Text style={styles.avatarText}>A</Text>
-                </View>
-                <TouchableOpacity style={styles.editButton}>
-                    <Edit2 color="#fff" size={14} />
-                </TouchableOpacity>
+    <LinearGradient colors={['#F7E8D8', '#F3DCC4', '#ECD0B8']} style={styles.container}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <View style={styles.heroCard}>
+          <View style={styles.heroTop}>
+            <View>
+              <Text style={styles.kicker}>your profile</Text>
+              <Text style={styles.name}>{currentName}</Text>
+              <Text style={styles.email}>{profile?.email || auth.currentUser?.email}</Text>
             </View>
-            <Text style={styles.name}>Alex</Text>
-            <TouchableOpacity style={styles.copyCode}>
-                <Text style={styles.codeText}>Bumping Code: BUMP123</Text>
-            </TouchableOpacity>
-        </View>
-      </View>
+            <Image source={{ uri: getAvatarUri(profile, currentName) }} style={styles.avatarImage} />
+          </View>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Recent Moments</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.momentsList}>
-            <View style={styles.momentItem} />
-            <View style={styles.momentItem} />
-            <View style={styles.momentItem} />
-        </ScrollView>
-      </View>
-
-      <View style={styles.statsContainer}>
-        <View style={styles.statCard}>
-            <View style={styles.statIconContainer}>
-                <Navigation color="#38BDF8" size={30} />
+          <View style={styles.badgeRow}>
+            <View style={styles.badge}>
+              <Shield color="#111111" size={14} />
+              <Text style={styles.badgeText}>secure sync</Text>
             </View>
-            <Text style={styles.statValue}>120 km</Text>
-            <Text style={styles.statLabel}>Total Distance Traveled</Text>
+            <View style={styles.badge}>
+              <MapPin color="#111111" size={14} />
+              <Text style={styles.badgeText}>live location</Text>
+            </View>
+          </View>
         </View>
 
-        <View style={styles.statCard}>
-            <View style={styles.statIconContainer}>
-                <MapPin color="#38BDF8" size={30} />
-            </View>
-            <Text style={styles.statValue}>45</Text>
-            <Text style={styles.statLabel}>Places Visited</Text>
+        <View style={styles.statsRow}>
+          <StatCard value={stats.friends} label="friends" accent="#2563EB" />
+          <StatCard value={stats.groups} label="groups" accent="#F59E0B" />
+          <StatCard value={stats.trails} label="trails" accent="#16A34A" />
         </View>
-      </View>
 
-      <View style={styles.menuContainer}>
+        <View style={styles.panel}>
+          <Text style={styles.panelTitle}>Quick jumps</Text>
+          <TouchableOpacity style={styles.actionRow} onPress={() => navigation.navigate('Friends')}>
+            <Users color="#111111" size={18} />
+            <Text style={styles.actionText}>Open Friends</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.actionRow} onPress={() => navigation.navigate('Chats')}>
+            <MessageCircle color="#111111" size={18} />
+            <Text style={styles.actionText}>Open Chats</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.actionRow} onPress={() => navigation.navigate('CreateGroup')}>
+            <Users color="#111111" size={18} />
+            <Text style={styles.actionText}>Create Group</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.panel}>
+          <Text style={styles.panelTitle}>Privacy</Text>
+          <View style={styles.toggleRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.actionText}>Ghost Mode</Text>
+              <Text style={styles.panelText}>
+                Hide your live location from friends and stop broadcasting while enabled.
+              </Text>
+            </View>
+            <Switch
+              value={ghostMode}
+              onValueChange={handleToggleGhostMode}
+              trackColor={{ false: '#D1D5DB', true: '#111827' }}
+              thumbColor={ghostMode ? '#FFFFFF' : '#FFFFFF'}
+            />
+          </View>
+        </View>
+
+        <View style={styles.panel}>
+          <Text style={styles.panelTitle}>Demo setup</Text>
+          <Text style={styles.panelText}>
+            Seed demo data from the Friends screen to populate live people, map trails, chat rooms and sample conversations.
+          </Text>
+        </View>
+
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-            <LogOut color="#EF4444" size={20} style={styles.menuIcon} />
-            <Text style={styles.logoutText}>Log Out</Text>
+          <LogOut color="#FFFFFF" size={18} />
+          <Text style={styles.logoutText}>Log Out</Text>
         </TouchableOpacity>
-      </View>
-
-      <View style={styles.footer}>
-         <TouchableOpacity style={styles.addButton}>
-            <Plus color="#fff" size={32} />
-         </TouchableOpacity>
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </LinearGradient>
   );
-};
+}
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0F172A',
   },
-  header: {
-    paddingTop: 50,
-    paddingHorizontal: 20,
+  content: {
+    paddingTop: 56,
+    paddingHorizontal: 18,
+    paddingBottom: 32,
+    gap: 16,
+  },
+  heroCard: {
+    borderRadius: 30,
+    backgroundColor: '#111111',
+    padding: 20,
+  },
+  heroTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 30,
+    gap: 12,
   },
-  settingsButton: {
-    alignSelf: 'flex-end',
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#1E293B',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  profileInfo: {
-      alignItems: 'center',
-      marginTop: 10,
-  },
-  avatarContainer: {
-      position: 'relative',
-      marginBottom: 15,
-  },
-  avatar: {
-      width: 100,
-      height: 100,
-      borderRadius: 50,
-      backgroundColor: '#1E293B',
-      justifyContent: 'center',
-      alignItems: 'center',
-      borderWidth: 4,
-      borderColor: '#38BDF8',
-  },
-  avatarText: {
-      color: '#fff',
-      fontSize: 40,
-      fontWeight: 'bold',
-  },
-  editButton: {
-      position: 'absolute',
-      right: 0,
-      top: 0,
-      backgroundColor: '#38BDF8',
-      width: 28,
-      height: 28,
-      borderRadius: 14,
-      justifyContent: 'center',
-      alignItems: 'center',
-      borderWidth: 2,
-      borderColor: '#0F172A',
+  kicker: {
+    color: '#FDE68A',
+    fontSize: 12,
+    fontWeight: '800',
+    textTransform: 'lowercase',
   },
   name: {
-      color: '#F8FAFC',
-      fontSize: 24,
-      fontWeight: 'bold',
-      marginBottom: 5,
+    color: '#FFFFFF',
+    fontSize: 32,
+    fontWeight: '900',
+    letterSpacing: -1.1,
+    marginTop: 4,
+    textTransform: 'lowercase',
   },
-  copyCode: {
-      backgroundColor: '#1E293B',
-      paddingHorizontal: 16,
-      paddingVertical: 8,
-      borderRadius: 20,
-      borderWidth: 1,
-      borderColor: '#334155',
+  email: {
+    color: '#B5BDC8',
+    fontSize: 13,
+    marginTop: 6,
   },
-  codeText: {
-      color: '#94A3B8',
-      fontSize: 12,
+  avatarImage: {
+    width: 82,
+    height: 82,
+    borderRadius: 28,
+    backgroundColor: '#E5E7EB',
   },
-  section: {
-      paddingHorizontal: 20,
-      marginBottom: 30,
+  badgeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 18,
   },
-  sectionTitle: {
-      color: '#F8FAFC',
-      fontSize: 18,
-      fontWeight: 'bold',
-      marginBottom: 15,
-  },
-  momentsList: {
-      gap: 15,
-  },
-  momentItem: {
-      width: 120,
-      height: 160,
-      borderRadius: 20,
-      backgroundColor: '#1E293B',
-      borderWidth: 1,
-      borderColor: '#334155',
-  },
-  statsContainer: {
-      flexDirection: 'row',
-      paddingHorizontal: 20,
-      gap: 15,
-      marginBottom: 20,
-  },
-  statCard: {
-      flex: 1,
-      backgroundColor: '#1E293B',
-      borderRadius: 24,
-      padding: 20,
-      alignItems: 'center',
-      borderWidth: 1,
-      borderColor: '#334155',
-  },
-  statIconContainer: {
-      marginBottom: 15,
-  },
-  statValue: {
-      color: '#F8FAFC',
-      fontSize: 18,
-      fontWeight: 'bold',
-      marginBottom: 5,
-  },
-  statLabel: {
-      color: '#64748B',
-      fontSize: 12,
-      textAlign: 'center',
-  },
-  menuContainer: {
-    paddingHorizontal: 20,
-    marginBottom: 30,
-  },
-  logoutButton: {
+  badge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1E293B',
-    padding: 16,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#334155',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: '#FDE68A',
   },
-  menuIcon: {
-    marginRight: 12,
+  badgeText: {
+    color: '#111111',
+    fontSize: 12,
+    fontWeight: '900',
+    textTransform: 'lowercase',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  statCard: {
+    flex: 1,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255,255,255,0.72)',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+  },
+  statValue: {
+    fontSize: 26,
+    fontWeight: '900',
+  },
+  statLabel: {
+    color: '#6B7280',
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 4,
+    textTransform: 'lowercase',
+  },
+  panel: {
+    borderRadius: 28,
+    backgroundColor: 'rgba(255,255,255,0.78)',
+    padding: 16,
+    gap: 10,
+  },
+  panelTitle: {
+    color: '#111111',
+    fontSize: 17,
+    fontWeight: '900',
+  },
+  actionRow: {
+    minHeight: 52,
+    borderRadius: 18,
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  actionText: {
+    color: '#111111',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  panelText: {
+    color: '#4B5563',
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  toggleRow: {
+    minHeight: 64,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  logoutButton: {
+    minHeight: 56,
+    borderRadius: 22,
+    backgroundColor: '#111111',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 10,
   },
   logoutText: {
-    color: '#EF4444',
-    fontSize: 16,
-    fontWeight: '600',
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '900',
   },
-  footer: {
-      alignItems: 'center',
-      marginBottom: 40,
-  },
-  addButton: {
-      width: 64,
-      height: 64,
-      borderRadius: 32,
-      backgroundColor: '#38BDF8',
-      justifyContent: 'center',
-      alignItems: 'center',
-      elevation: 5,
-  }
 });
-
-export default ProfileScreen;

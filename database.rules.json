@@ -1,0 +1,19 @@
+{
+  "rules": {
+    "locations": {
+      "$uid": {
+        ".read": "auth != null && root.child('location_visibility').child(auth.uid).child($uid).val() === true",
+        ".write": "auth != null && auth.uid === $uid",
+        ".validate": "newData.hasChildren(['uid', 'latitude', 'longitude', 'updatedAt']) && newData.child('uid').val() === auth.uid"
+      }
+    },
+    "location_visibility": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        "$visibleUid": {
+          ".write": "auth != null && auth.uid === $uid"
+        }
+      }
+    }
+  }
+}

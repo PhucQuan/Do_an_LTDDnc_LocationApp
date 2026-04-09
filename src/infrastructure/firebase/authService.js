@@ -9,6 +9,7 @@ import {
 import { doc, setDoc, getDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { User } from "../../domain/entities/User";
 import emailjs from 'emailjs-com';
+import { locationService } from './locationService';
 
 class AuthService {
   /**
@@ -190,18 +191,47 @@ class AuthService {
   }
 
   async logout() {
+    await locationService.clearMyLocation();
     return await signOut(auth);
   }
 
   subscribe(callback) {
-    return onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        const userDoc = await getDoc(doc(db, "users", firebaseUser.uid));
-        callback(userDoc.exists() ? User.fromFirestore(userDoc) : null);
-      } else {
+    return onAuthStateChanged(
+      auth,
+      async (firebaseUser) => {
+        if (!firebaseUser) {
+          callback(null);
+          return;
+        }
+
+        try {
+          const userDoc = await getDoc(doc(db, "users", firebaseUser.uid));
+
+          if (userDoc.exists()) {
+            callback(User.fromFirestore(userDoc));
+            return;
+          }
+
+          // If the Firestore profile has not been created yet, still let the app continue.
+          callback({
+            id: firebaseUser.uid,
+            email: firebaseUser.email,
+            name: firebaseUser.displayName || firebaseUser.email?.split("@")[0] || "Explorer",
+          });
+        } catch (error) {
+          console.error("[AuthService] Failed to load profile during auth bootstrap:", error);
+          callback({
+            id: firebaseUser.uid,
+            email: firebaseUser.email,
+            name: firebaseUser.displayName || firebaseUser.email?.split("@")[0] || "Explorer",
+          });
+        }
+      },
+      (error) => {
+        console.error("[AuthService] Auth state subscription failed:", error);
         callback(null);
       }
-    });
+    );
   }
 }
 

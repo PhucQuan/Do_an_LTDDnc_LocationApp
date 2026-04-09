@@ -1,193 +1,364 @@
-import React, { useRef, useState, useCallback, useEffect } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Alert,
+  Image,
+  Pressable,
   StyleSheet,
-  View,
   Text,
   TouchableOpacity,
-  Animated,
-  Dimensions,
-  ScrollView,
-  Image,
+  View,
 } from 'react-native';
-import MapView, { Marker, PROVIDER_DEFAULT, Circle } from 'react-native-maps';
+import * as ImagePicker from 'expo-image-picker';
+import MapView, {
+  AnimatedRegion,
+  Marker,
+  Polyline,
+  PROVIDER_DEFAULT,
+} from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
+import { Camera, ImagePlus, MessageCircle, Settings2, Users } from 'lucide-react-native';
+import { auth, db } from '../../../infrastructure/firebase/firebase';
 import { useLocation } from '../../../core/hooks/useLocation';
+import { useVisibilityScope } from '../../../core/hooks/useVisibilityScope';
 import { locationService } from '../../../infrastructure/firebase/locationService';
+import { momentService } from '../../../infrastructure/firebase/momentService';
+import { SocialMapMarker } from '../../components/map/SocialMapMarker';
+import { SelectedUserSheet } from '../../components/map/SelectedUserSheet';
+import { MomentViewerModal } from '../../components/map/MomentViewerModal';
 
-const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
-
-// ─── Mock activity data (Tuần 2 sẽ thay bằng real Firestore) ────────────────
-const MOCK_ACTIVITIES = [
-  { id: '1', name: 'Thành Tú 💙', action: 'đã đến trường', time: 'VỪA XONG', avatar: null },
-  { id: '2', name: 'Mạnh Hùng 🔥', action: 'đã về nhà', time: '5 phút', avatar: null },
-  { id: '3', name: 'Thành Tú 💙', action: 'đã đến quán cà phê', time: 'VỪA XONG', avatar: null },
+const FILTERS = [
+  { key: 'today', label: 'NOW' },
+  { key: 'yesterday', label: 'BEFORE' },
 ];
 
-// ─── Pulse animation wrapper ─────────────────────────────────────────────────
-function PulseRing({ color = '#38BDF8', size = 60 }) {
-  const pulse = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 1, duration: 1500, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 0, duration: 0, useNativeDriver: true }),
-      ])
-    ).start();
-  }, []);
-  const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 2.2] });
-  const opacity = pulse.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0.5, 0.2, 0] });
-  return (
-    <Animated.View
-      style={{
-        position: 'absolute',
-        width: size, height: size, borderRadius: size / 2,
-        backgroundColor: color,
-        transform: [{ scale }],
-        opacity,
-      }}
-    />
-  );
+const PATH_COLORS = ['#1D4ED8', '#F472B6', '#22C55E', '#F59E0B', '#A78BFA'];
+
+function buildAnimatedRegion(coords) {
+  return new AnimatedRegion({
+    latitude: coords.latitude,
+    longitude: coords.longitude,
+    latitudeDelta: 0.012,
+    longitudeDelta: 0.012,
+  });
 }
 
-// ─── Avatar Marker – bản thân ────────────────────────────────────────────────
-function MyAvatarMarker({ initials = 'Q' }) {
-  return (
-    <View style={styles.avatarMarkerWrapper}>
-      <PulseRing color="#38BDF8" size={56} />
-      <View style={styles.avatarMarkerRing}>
-        <View style={styles.avatarMarkerInner}>
-          <Text style={styles.avatarInitials}>{initials}</Text>
-        </View>
-      </View>
-      {/* LIVE badge */}
-      <View style={styles.liveBadge}>
-        <View style={styles.liveDot} />
-        <Text style={styles.liveText}>LIVE</Text>
-      </View>
-    </View>
-  );
+function formatStatus(status = 'dung yen') {
+  if (status === 'dang chay') {
+    return 'running';
+  }
+  if (status === 'dang di chuyen') {
+    return 'moving';
+  }
+  return 'still';
 }
 
-// ─── Avatar Marker – người khác ──────────────────────────────────────────────
-function OtherAvatarMarker({ name = '?' }) {
-  const initial = name ? name[0].toUpperCase() : '?';
-  return (
-    <View style={styles.otherAvatarWrapper}>
-      <PulseRing color="#F472B6" size={48} />
-      <View style={styles.otherAvatarRing}>
-        <View style={[styles.avatarMarkerInner, { backgroundColor: '#F472B6' }]}>
-          <Text style={styles.avatarInitials}>{initial}</Text>
-        </View>
-      </View>
-    </View>
-  );
+function getFallbackAvatar(name) {
+  return `https://ui-avatars.com/api/?name=${encodeURIComponent(
+    name || 'You'
+  )}&background=111827&color=FFFFFF&size=256`;
 }
 
-// ─── Activity Card ────────────────────────────────────────────────────────────
-function ActivityCard({ item, index }) {
-  const translateX = useRef(new Animated.Value(50)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(translateX, {
-        toValue: 0, duration: 400, delay: index * 120, useNativeDriver: true
-      }),
-      Animated.timing(opacity, {
-        toValue: 1, duration: 400, delay: index * 120, useNativeDriver: true
-      }),
-    ]).start();
-  }, []);
-  return (
-    <Animated.View style={[styles.activityCard, { transform: [{ translateX }], opacity }]}>
-      {/* Avatar placeholder */}
-      <View style={styles.activityAvatar}>
-        <Text style={{ fontSize: 18 }}>
-          {item.name.includes('Tú') ? '👤' : '👤'}
-        </Text>
-      </View>
-      <View style={{ flex: 1 }}>
-        <Text style={styles.activityName}>{item.name}</Text>
-        <Text style={styles.activityAction}>{item.action}</Text>
-      </View>
-      <Text style={styles.activityTime}>{item.time}</Text>
-    </Animated.View>
-  );
+function getMomentCoordinates(moment) {
+  const latitude = Number(moment?.location?.latitude);
+  const longitude = Number(moment?.location?.longitude);
+
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return null;
+  }
+
+  return { latitude, longitude };
 }
 
-// ─── Main Screen ─────────────────────────────────────────────────────────────
-export default function MapScreen() {
-  const { location, isLoading, errorMsg, getLocation } = useLocation();
+export default function MapScreen({ navigation }) {
+  const { location, isLoading, errorMsg } = useLocation();
+  const visibleUserIds = useVisibilityScope();
   const mapRef = useRef(null);
+  const animatedMarkersRef = useRef({});
+  const fitTimeoutRef = useRef(null);
+
   const [otherUsers, setOtherUsers] = useState({});
-  const [cityName, setCityName] = useState('Vị trí của bạn');
-  const [showActivity, setShowActivity] = useState(true);
-  const panelAnim = useRef(new Animated.Value(0)).current;
+  const [currentProfile, setCurrentProfile] = useState(null);
+  const [cityName, setCityName] = useState('Your city');
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [historyFilter, setHistoryFilter] = useState('today');
+  const [showFootprints, setShowFootprints] = useState(true);
+  const [footprints, setFootprints] = useState([]);
+  const [friendCount, setFriendCount] = useState(0);
+  const [moments, setMoments] = useState([]);
+  const [selectedMoment, setSelectedMoment] = useState(null);
+  const [followCurrentUser, setFollowCurrentUser] = useState(true);
 
   const coords = location?.coords ?? null;
+  const currentUid = auth.currentUser?.uid;
+  const currentName =
+    currentProfile?.name ||
+    auth.currentUser?.displayName ||
+    auth.currentUser?.email?.split('@')[0] ||
+    'You';
+  const currentAvatar = currentProfile?.avatarUrl || auth.currentUser?.photoURL || null;
 
-  // Reverse geocode tên thành phố (dùng expo-location)
   useEffect(() => {
-    if (!coords) return;
-    import('expo-location').then(({ reverseGeocodeAsync }) => {
-      reverseGeocodeAsync({ latitude: coords.latitude, longitude: coords.longitude })
-        .then((results) => {
-          if (results?.[0]) {
-            const r = results[0];
-            setCityName(r.district || r.city || r.region || 'Vị trí của bạn');
-          }
-        })
-        .catch(() => {});
-    });
-  }, [coords?.latitude, coords?.longitude]);
+    const loadProfile = async () => {
+      const uid = auth.currentUser?.uid;
+      if (!uid) {
+        return;
+      }
 
-  // Auto-push lên RTDB
-  useEffect(() => {
-    if (!coords) return;
-    locationService.pushLocation(coords.latitude, coords.longitude, coords.accuracy);
-  }, [coords?.latitude, coords?.longitude]);
+      const userSnapshot = await getDoc(doc(db, 'users', uid));
+      if (userSnapshot.exists()) {
+        setCurrentProfile(userSnapshot.data());
+      }
 
-  // Subscribe vị trí người khác
-  useEffect(() => {
-    const unsub = locationService.subscribeToAllLocations(setOtherUsers);
-    return () => unsub();
+      const friendshipsSnapshot = await getDocs(
+        query(collection(db, 'friendships'), where('status', '==', 'accepted'))
+      );
+
+      const totalFriends = friendshipsSnapshot.docs.filter((entry) => {
+        const data = entry.data();
+        return data.userId1 === uid || data.userId2 === uid;
+      }).length;
+
+      setFriendCount(totalFriends);
+      await locationService.syncLocationVisibility().catch(() => {});
+    };
+
+    loadProfile();
   }, []);
 
-  // Toggle activity panel
-  const toggleActivity = useCallback(() => {
-    Animated.spring(panelAnim, {
-      toValue: showActivity ? 0 : 1,
-      useNativeDriver: true,
-      friction: 8,
-    }).start();
-    setShowActivity((v) => !v);
-  }, [showActivity]);
+  useEffect(() => {
+    if (!coords) {
+      return;
+    }
 
-  const flyToUser = useCallback(() => {
-    if (!coords || !mapRef.current) return;
-    mapRef.current.animateToRegion(
-      { latitude: coords.latitude, longitude: coords.longitude, latitudeDelta: 0.008, longitudeDelta: 0.008 },
-      700
+    import('expo-location')
+      .then(({ reverseGeocodeAsync }) =>
+        reverseGeocodeAsync({
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+        })
+      )
+      .then((results) => {
+        if (results?.[0]) {
+          const place = results[0];
+          setCityName(place.city || place.district || place.region || 'Your city');
+        }
+      })
+      .catch(() => {});
+  }, [coords?.latitude, coords?.longitude]);
+
+  useEffect(() => {
+    if (!coords) {
+      return;
+    }
+
+    locationService.pushLocation(location);
+  }, [location, coords?.latitude, coords?.longitude]);
+
+  useEffect(() => {
+    const unsubscribe = locationService.subscribeToAllLocations((payload) => {
+      setOtherUsers((previous) => {
+        const nextUsers = {};
+
+        Object.entries(payload).forEach(([uid, user]) => {
+          if (!visibleUserIds.has(uid) || user.isGhostMode) {
+            return;
+          }
+
+          nextUsers[uid] = previous[uid]
+            ? { ...previous[uid], ...user }
+            : user;
+
+          const nextCoordinate = {
+            latitude: user.latitude,
+            longitude: user.longitude,
+          };
+
+          const existingMarker = animatedMarkersRef.current[uid];
+          if (!existingMarker) {
+            animatedMarkersRef.current[uid] = buildAnimatedRegion(nextCoordinate);
+          } else {
+            existingMarker.timing({
+              ...nextCoordinate,
+              duration: 850,
+              useNativeDriver: false,
+            }).start();
+          }
+        });
+
+        return nextUsers;
+      });
+    });
+
+    return () => unsubscribe();
+  }, [visibleUserIds]);
+
+  useEffect(() => {
+    const unsubscribe = locationService.subscribeToHistory(historyFilter, (paths) => {
+      setFootprints(paths.filter((path) => visibleUserIds.has(path.uid)));
+    });
+
+    return () => unsubscribe();
+  }, [historyFilter, visibleUserIds]);
+
+  useEffect(() => {
+    const unsubscribe = momentService.subscribeToRecentMoments((items) => {
+      setMoments(items.filter((item) => visibleUserIds.has(item.userId)));
+    });
+
+    return () => unsubscribe();
+  }, [visibleUserIds]);
+
+  useEffect(() => {
+    if (!coords || !mapRef.current || !followCurrentUser) {
+      return;
+    }
+
+    mapRef.current.animateCamera(
+      {
+        center: {
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+        },
+        zoom: 16.2,
+      },
+      { duration: 900 }
     );
-  }, [coords]);
+  }, [coords?.latitude, coords?.longitude, followCurrentUser]);
+
+  useEffect(() => {
+    if (!mapRef.current || !coords) {
+      return;
+    }
+
+    const coordinates = [
+      { latitude: coords.latitude, longitude: coords.longitude },
+      ...Object.values(otherUsers).map((user) => ({
+        latitude: user.latitude,
+        longitude: user.longitude,
+      })),
+    ];
+
+    if (coordinates.length < 2) {
+      return;
+    }
+
+    clearTimeout(fitTimeoutRef.current);
+    fitTimeoutRef.current = setTimeout(() => {
+      mapRef.current?.fitToCoordinates(coordinates, {
+        edgePadding: { top: 180, right: 72, bottom: 250, left: 72 },
+        animated: true,
+      });
+    }, 600);
+
+    return () => clearTimeout(fitTimeoutRef.current);
+  }, [coords?.latitude, coords?.longitude, Object.keys(otherUsers).join('|')]);
+
+  useEffect(() => {
+    return () => {
+      locationService.flushHistoryBuffer();
+    };
+  }, []);
+
+  const onlineUsers = useMemo(() => Object.entries(otherUsers), [otherUsers]);
+  const visibleMoments = useMemo(
+    () => moments.filter((moment) => getMomentCoordinates(moment)),
+    [moments]
+  );
+
+  const focusFriend = (uid, user) => {
+    setFollowCurrentUser(false);
+    setSelectedUser({
+      uid,
+      ...user,
+      statusLabel: formatStatus(user.status),
+    });
+
+    mapRef.current?.animateCamera(
+      {
+        center: {
+          latitude: user.latitude,
+          longitude: user.longitude,
+        },
+        zoom: 16.4,
+      },
+      { duration: 700 }
+    );
+  };
+
+  const centerOnMe = () => {
+    if (!coords || !mapRef.current) {
+      return;
+    }
+
+    setFollowCurrentUser(true);
+    setSelectedUser(null);
+    mapRef.current.animateCamera(
+      {
+        center: {
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+        },
+        zoom: 16.5,
+      },
+      { duration: 700 }
+    );
+  };
+
+  const handleShareMoment = async (mode) => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (permission.status !== 'granted') {
+        Alert.alert('Permission needed', 'Please allow photo access to share moments.');
+        return;
+      }
+
+      const result =
+        mode === 'camera'
+          ? await ImagePicker.launchCameraAsync({
+              mediaTypes: ['images'],
+              quality: 0.8,
+            })
+          : await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ['images'],
+              quality: 0.8,
+            });
+
+      if (result.canceled || !result.assets?.[0]?.uri || !coords) {
+        return;
+      }
+
+      await momentService.createMoment({
+        localUri: result.assets[0].uri,
+        location,
+      });
+
+      Alert.alert('Moment shared', 'Your new moment is now visible on the map.');
+    } catch (error) {
+      Alert.alert('Upload failed', error.message || 'Could not share this moment.');
+    }
+  };
+
+  const openMomentPicker = () => {
+    Alert.alert('Share a moment', 'Choose how you want to add a map moment.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Camera', onPress: () => handleShareMoment('camera') },
+      { text: 'Library', onPress: () => handleShareMoment('library') },
+    ]);
+  };
 
   if (isLoading || !coords) {
     return (
       <View style={styles.loadingScreen}>
-        <Text style={styles.loadingEmoji}>🌍</Text>
-        <Text style={styles.loadingText}>Đang xác định vị trí…</Text>
+        <Text style={styles.loadingTitle}>Finding your live location...</Text>
+        {!!errorMsg && <Text style={styles.loadingHint}>{errorMsg}</Text>}
       </View>
     );
   }
 
-  const onlineCount = Object.keys(otherUsers).length;
-  const panelTranslate = panelAnim.interpolate({
-    inputRange: [0, 1], outputRange: [220, 0]
-  });
-
   return (
-    <View style={{ flex: 1 }}>
-      {/* ── Bản đồ full-screen ── */}
+    <View style={styles.container}>
       <MapView
         ref={mapRef}
         style={StyleSheet.absoluteFill}
@@ -199,344 +370,427 @@ export default function MapScreen() {
           longitudeDelta: 0.012,
         }}
         showsUserLocation={false}
-        showsMyLocationButton={false}
         showsCompass={false}
-        rotateEnabled
-        scrollEnabled
-        zoomEnabled
-        pitchEnabled
+        showsMyLocationButton={false}
+        onPress={() => setSelectedUser(null)}
       >
-        {/* Marker bản thân */}
         <Marker
           coordinate={{ latitude: coords.latitude, longitude: coords.longitude }}
           anchor={{ x: 0.5, y: 0.5 }}
           tracksViewChanges={false}
+          zIndex={1000}
         >
-          <MyAvatarMarker initials="Q" />
+          <SocialMapMarker
+            name={currentName}
+            avatarUrl={currentAvatar}
+            speedKmh={location?.meta?.speedKmh}
+            lastUpdatedAt={Date.now()}
+            bubbleAccent={['#60A5FA', '#C084FC', '#F9A8D4']}
+            showSpeed
+          />
         </Marker>
 
-        {/* Radius circle mờ */}
-        <Circle
-          center={{ latitude: coords.latitude, longitude: coords.longitude }}
-          radius={150}
-          fillColor="rgba(56,189,248,0.06)"
-          strokeColor="rgba(56,189,248,0.2)"
-          strokeWidth={1}
-        />
+        {showFootprints &&
+          footprints.map((path, index) => (
+            <Polyline
+              key={`${path.uid}-${historyFilter}`}
+              coordinates={path.coordinates}
+              strokeColor={PATH_COLORS[index % PATH_COLORS.length]}
+              strokeWidth={4}
+              lineCap="round"
+              lineJoin="round"
+            />
+          ))}
 
-        {/* Markers người khác */}
-        {Object.entries(otherUsers).map(([uid, data]) => (
-          <Marker
-            key={uid}
-            coordinate={{ latitude: data.latitude, longitude: data.longitude }}
-            anchor={{ x: 0.5, y: 0.5 }}
-            tracksViewChanges={false}
-          >
-            <OtherAvatarMarker name={data.displayName} />
-          </Marker>
-        ))}
+        {onlineUsers.map(([uid, user]) => {
+          const animatedCoordinate =
+            animatedMarkersRef.current[uid] ||
+            buildAnimatedRegion({
+              latitude: user.latitude,
+              longitude: user.longitude,
+            });
+
+          if (!animatedMarkersRef.current[uid]) {
+            animatedMarkersRef.current[uid] = animatedCoordinate;
+          }
+
+          return (
+            <Marker.Animated
+              key={uid}
+              coordinate={animatedCoordinate}
+              anchor={{ x: 0.5, y: 0.5 }}
+              tracksViewChanges={false}
+              zIndex={900}
+              onPress={() => focusFriend(uid, user)}
+            >
+              <SocialMapMarker
+                name={user.displayName || 'Friend'}
+                avatarUrl={user.avatarUrl}
+                speedKmh={user.speedKmh}
+                lastUpdatedAt={user.updatedAt}
+                isGhostMode={user.isGhostMode}
+                bubbleAccent={['#FDE68A', '#F9A8D4', '#C4B5FD']}
+              />
+            </Marker.Animated>
+          );
+        })}
+
+        {visibleMoments.map((moment) => {
+          const point = getMomentCoordinates(moment);
+          return (
+            <Marker
+              key={moment.id}
+              coordinate={point}
+              anchor={{ x: 0.5, y: 1 }}
+              tracksViewChanges={false}
+              onPress={() => setSelectedMoment(moment)}
+            >
+              <View style={styles.momentPin}>
+                <Image source={{ uri: moment.imageUrl }} style={styles.momentImage} />
+              </View>
+            </Marker>
+          );
+        })}
       </MapView>
 
-      {/* ── Gradient overlay trên cùng ── */}
-      <LinearGradient
-        colors={['rgba(0,0,0,0.55)', 'rgba(0,0,0,0.15)', 'transparent']}
-        style={styles.topGradient}
-        pointerEvents="none"
-      />
-
-      {/* ── Header ── */}
       <SafeAreaView edges={['top']} style={styles.header}>
-        {/* City name */}
         <View>
-          <Text style={styles.cityName}>{cityName}</Text>
-          <View style={styles.coordsRow}>
-            <Text style={styles.coordsSmall}>
-              {coords.latitude.toFixed(4)}, {coords.longitude.toFixed(4)}
-            </Text>
-            {onlineCount > 0 && (
-              <View style={styles.onlinePill}>
-                <View style={styles.greenDot} />
-                <Text style={styles.onlinePillText}>+{onlineCount} online</Text>
-              </View>
-            )}
-          </View>
+          <Text style={styles.cityTitle}>{cityName}</Text>
+          <View style={styles.cityUnderline} />
         </View>
-
-        {/* Top-right actions */}
-        <View style={styles.topActions}>
-          <TouchableOpacity style={styles.topBtn} onPress={toggleActivity}>
-            <Text style={{ fontSize: 18 }}>🔔</Text>
-          </TouchableOpacity>
-          <View style={styles.topAvatar}>
-            <Text style={{ fontSize: 16 }}>Q</Text>
-          </View>
-        </View>
+        <TouchableOpacity style={styles.settingsButton} onPress={() => navigation.navigate('Profile')}>
+          <Settings2 color="#111111" size={20} />
+        </TouchableOpacity>
       </SafeAreaView>
 
-      {/* ── Activity panel (slide up) ── */}
-      <Animated.View
-        style={[
-          styles.activityPanel,
-          { transform: [{ translateY: panelTranslate }] },
-        ]}
-        pointerEvents={showActivity ? 'box-none' : 'none'}
-      >
-        {MOCK_ACTIVITIES.map((item, i) => (
-          <ActivityCard key={item.id} item={item} index={i} />
-        ))}
-      </Animated.View>
+      <View style={styles.topStats}>
+        <View style={styles.statCard}>
+          <Text style={styles.statValue}>{friendCount || onlineUsers.length}</Text>
+          <Text style={styles.statLabel}>friends</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={styles.statValue}>{visibleMoments.length}</Text>
+          <Text style={styles.statLabel}>moments</Text>
+        </View>
+      </View>
 
-      {/* ── Gradient overlay dưới ── */}
+      <View style={styles.rightRail}>
+        <TouchableOpacity style={styles.railButton} onPress={() => navigation.navigate('Friends')}>
+          <Users color="#111111" size={18} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.railButton} onPress={() => navigation.navigate('Chats')}>
+          <MessageCircle color="#111111" size={18} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.railButton} onPress={openMomentPicker}>
+          <ImagePlus color="#111111" size={18} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.railButton} onPress={() => setShowFootprints((current) => !current)}>
+          <Camera color="#111111" size={18} />
+        </TouchableOpacity>
+      </View>
+
       <LinearGradient
-        colors={['transparent', 'rgba(0,0,0,0.5)', 'rgba(0,0,0,0.82)']}
-        style={styles.bottomGradient}
+        colors={['rgba(255,255,255,0.35)', 'rgba(255,255,255,0)']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.heroFog}
         pointerEvents="none"
       />
 
-      {/* ── Bottom floating bar ── */}
-      <SafeAreaView edges={['bottom']} style={styles.bottomBarContainer}>
-        <View style={styles.bottomBar}>
-          {/* Nút bên trái */}
-          <TouchableOpacity style={styles.bottomBtn}>
-            <Text style={styles.bottomBtnIcon}>👥</Text>
-            <Text style={styles.bottomBtnLabel}>Bạn bè</Text>
+      <View style={styles.filterDock}>
+        {FILTERS.map((filter) => (
+          <TouchableOpacity
+            key={filter.key}
+            style={[styles.filterCard, historyFilter === filter.key && styles.filterCardActive]}
+            onPress={() => setHistoryFilter(filter.key)}
+          >
+            <Text style={[styles.filterTime, historyFilter === filter.key && styles.filterTextActive]}>
+              {filter.key === 'today' ? '17:16' : '20:05'}
+            </Text>
+            <Text style={[styles.filterLabel, historyFilter === filter.key && styles.filterTextActive]}>
+              {filter.label}
+            </Text>
           </TouchableOpacity>
+        ))}
+        <TouchableOpacity style={styles.nowCard} onPress={centerOnMe}>
+          <Text style={styles.nowText}>{followCurrentUser ? 'LIVE' : 'FOLLOW'}</Text>
+        </TouchableOpacity>
+      </View>
 
-          <TouchableOpacity style={styles.bottomBtn}>
-            <Text style={styles.bottomBtnIcon}>💬</Text>
-            <Text style={styles.bottomBtnLabel}>Chat</Text>
-          </TouchableOpacity>
+      <View style={styles.bottomDock}>
+        <TouchableOpacity style={styles.dockButton} onPress={() => navigation.navigate('Friends')}>
+          <Users color="#111111" size={19} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.dockButton} onPress={() => navigation.navigate('Chats')}>
+          <MessageCircle color="#111111" size={19} />
+        </TouchableOpacity>
+        <Pressable style={styles.meBubble} onPress={centerOnMe}>
+          <Image
+            source={{ uri: currentAvatar || getFallbackAvatar(currentName) }}
+            style={styles.meBubbleImage}
+          />
+        </Pressable>
+      </View>
 
-          {/* Nút FAB trung tâm với Nhãn */}
-          <View style={styles.fabContainer}>
-            <TouchableOpacity style={styles.fabBtn} onPress={flyToUser}>
-              <LinearGradient 
-                colors={['#38BDF8', '#818CF8']} 
-                style={styles.fabGradient} 
-                start={{ x: 0, y: 0 }} 
-                end={{ x: 1, y: 1 }}
-              >
-                <Text style={{ fontSize: 22, color: '#FFF' }}>◎</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-            <Text style={[styles.bottomBtnLabel, { color: '#38BDF8', fontWeight: '800' }]}>Dẫn đường</Text>
-          </View>
+      <SelectedUserSheet
+        user={selectedUser}
+        onClose={() => setSelectedUser(null)}
+        onChat={() => navigation.navigate('Chats')}
+      />
 
-          <TouchableOpacity style={styles.bottomBtn}>
-            <Text style={styles.bottomBtnIcon}>🌐</Text>
-            <Text style={styles.bottomBtnLabel}>Khám phá</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.bottomBtn} onPress={toggleActivity}>
-            <Text style={styles.bottomBtnIcon}>🔔</Text>
-            <Text style={styles.bottomBtnLabel}>Thông báo</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
+      <MomentViewerModal moment={selectedMoment} onClose={() => setSelectedMoment(null)} />
     </View>
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  // ── Loading ──
+  container: {
+    flex: 1,
+    backgroundColor: '#F6EBDD',
+  },
   loadingScreen: {
-    flex: 1, backgroundColor: '#0F172A',
-    justifyContent: 'center', alignItems: 'center',
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F6EBDD',
+    paddingHorizontal: 24,
   },
-  loadingEmoji: { fontSize: 56, marginBottom: 16 },
-  loadingText: { color: '#94A3B8', fontSize: 16 },
-
-  // ── Gradients ──
-  topGradient: {
-    position: 'absolute', top: 0, left: 0, right: 0,
-    height: 180, zIndex: 5,
+  loadingTitle: {
+    color: '#111111',
+    fontSize: 20,
+    fontWeight: '900',
+    textAlign: 'center',
   },
-  bottomGradient: {
-    position: 'absolute', bottom: 0, left: 0, right: 0,
-    height: 200, zIndex: 5,
+  loadingHint: {
+    color: '#5B6470',
+    fontSize: 13,
+    marginTop: 10,
+    textAlign: 'center',
   },
-
-  // ── Header ──
   header: {
-    position: 'absolute', top: 0, left: 0, right: 0,
-    zIndex: 10,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 40,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     paddingHorizontal: 20,
-    paddingTop: 8,
+    paddingTop: 10,
   },
-  cityName: {
-    color: '#FFFFFF',
+  cityTitle: {
+    color: '#111111',
     fontSize: 34,
     fontWeight: '900',
-    letterSpacing: -0.5,
-    textShadowColor: 'rgba(0,0,0,0.5)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 6,
+    letterSpacing: -1.2,
+    textTransform: 'capitalize',
   },
-  coordsRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
-  coordsSmall: { color: 'rgba(255,255,255,0.7)', fontSize: 12, fontFamily: 'monospace' },
-  onlinePill: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: 'rgba(52,211,153,0.2)',
-    borderRadius: 20, paddingHorizontal: 8, paddingVertical: 2,
-    borderWidth: 1, borderColor: 'rgba(52,211,153,0.4)',
-    gap: 4,
+  cityUnderline: {
+    width: 120,
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: '#111111',
+    marginTop: 6,
   },
-  greenDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#34D399' },
-  onlinePillText: { color: '#34D399', fontSize: 11, fontWeight: '600' },
-  topActions: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8 },
-  topBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    backdropFilter: 'blur(10px)',
-    justifyContent: 'center', alignItems: 'center',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)',
-  },
-  topAvatar: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: '#38BDF8',
-    justifyContent: 'center', alignItems: 'center',
-    borderWidth: 2, borderColor: '#FFF',
-  },
-
-  // ── My Avatar Marker ──
-  avatarMarkerWrapper: { alignItems: 'center', justifyContent: 'center' },
-  avatarMarkerRing: {
-    width: 60, height: 60, borderRadius: 30,
-    borderWidth: 3, borderColor: '#FFFFFF',
-    justifyContent: 'center', alignItems: 'center',
-    backgroundColor: '#0F172A',
-    elevation: 8,
-    shadowColor: '#38BDF8',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.6, shadowRadius: 12,
-  },
-  avatarMarkerInner: {
-    width: 50, height: 50, borderRadius: 25,
-    backgroundColor: '#38BDF8',
-    justifyContent: 'center', alignItems: 'center',
-  },
-  avatarInitials: { color: '#FFF', fontSize: 20, fontWeight: '800' },
-  liveBadge: {
-    position: 'absolute', bottom: -6,
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#22C55E',
-    borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2,
-    gap: 3,
-    borderWidth: 1.5, borderColor: '#FFF',
-  },
-  liveDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: '#FFF' },
-  liveText: { color: '#FFF', fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
-
-  // ── Other Avatar Marker ──
-  otherAvatarWrapper: { alignItems: 'center', justifyContent: 'center' },
-  otherAvatarRing: {
-    width: 50, height: 50, borderRadius: 25,
-    borderWidth: 3, borderColor: '#FFFFFF',
-    justifyContent: 'center', alignItems: 'center',
-    backgroundColor: '#0F172A',
-    elevation: 6,
-    shadowColor: '#F472B6',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.6, shadowRadius: 10,
-  },
-
-  // ── Activity Panel ──
-  activityPanel: {
-    position: 'absolute',
-    bottom: 110,
-    right: 16,
-    width: SCREEN_W * 0.72,
-    zIndex: 20,
-    gap: 8,
-  },
-  activityCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.95)',
+  settingsButton: {
+    width: 46,
+    height: 46,
     borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 10,
-    shadowColor: '#000',
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000000',
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15, shadowRadius: 10,
-    elevation: 8,
+    elevation: 5,
   },
-  activityAvatar: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: '#EDE9FE',
-    justifyContent: 'center', alignItems: 'center',
-  },
-  activityName: { color: '#1E293B', fontSize: 13, fontWeight: '700' },
-  activityAction: { color: '#64748B', fontSize: 12, marginTop: 1 },
-  activityTime: { color: '#94A3B8', fontSize: 10, fontWeight: '600' },
-
-  // ── Bottom Bar ──
-  bottomBarContainer: {
+  topStats: {
     position: 'absolute',
-    bottom: 20, // Đẩy lên một chút để tạo hiệu ứng nổi
-    left: 0,
-    right: 0,
-    zIndex: 20,
-    alignItems: 'center',
+    top: 118,
+    left: 20,
+    zIndex: 35,
+    gap: 10,
   },
-  bottomBar: {
-    flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    width: SCREEN_W * 0.92,
-    borderRadius: 30,
+  statCard: {
+    width: 84,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255,255,255,0.94)',
+    borderWidth: 1,
+    borderColor: 'rgba(17,17,17,0.08)',
+    paddingVertical: 14,
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    justifyContent: 'space-between',
-    alignItems: 'center', // Align items to center vertically
-    // Shadow cho iOS
-    shadowColor: '#000',
+    shadowColor: '#111111',
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.15,
-    shadowRadius: 20,
-    // Elevation cho Android
-    elevation: 15,
+    elevation: 7,
   },
-  bottomBtn: { 
-    flex: 1,
-    alignItems: 'center', 
-    justifyContent: 'center',
-    gap: 4 
+  statValue: {
+    color: '#111111',
+    fontSize: 22,
+    fontWeight: '900',
+    letterSpacing: -0.5,
   },
-  bottomBtnIcon: { fontSize: 22 },
-  bottomBtnLabel: { 
-    color: '#64748B', 
-    fontSize: 10, 
-    fontWeight: '600',
-    textAlign: 'center'
+  statLabel: {
+    color: '#5B6470',
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    marginTop: 4,
   },
-
-  // FAB
-  fabContainer: {
-    marginTop: -35, // Đẩy FAB lên cao hơn mặt bằng chung
+  rightRail: {
+    position: 'absolute',
+    right: 18,
+    top: 190,
+    zIndex: 35,
+    gap: 12,
+  },
+  railButton: {
+    width: 46,
+    height: 46,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.94)',
     alignItems: 'center',
-    gap: 4,
-  },
-  fabBtn: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    elevation: 8,
-    shadowColor: '#38BDF8',
+    justifyContent: 'center',
+    shadowColor: '#000000',
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
+    elevation: 4,
   },
-  fabGradient: {
-    flex: 1,
-    borderRadius: 32,
-    justifyContent: 'center',
+  heroFog: {
+    position: 'absolute',
+    top: 210,
+    left: 34,
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    zIndex: 5,
+  },
+  filterDock: {
+    position: 'absolute',
+    bottom: 128,
+    left: 18,
+    right: 18,
+    zIndex: 35,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 10,
+  },
+  filterCard: {
+    width: 82,
+    height: 88,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    borderWidth: 1,
+    borderColor: 'rgba(17,17,17,0.08)',
+    paddingVertical: 12,
     alignItems: 'center',
-    borderWidth: 3,
-    borderColor: '#FFF',
+    justifyContent: 'space-between',
+    shadowColor: '#111111',
+    shadowOpacity: 0.14,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 8,
+  },
+  filterCardActive: {
+    backgroundColor: '#0F172A',
+    borderWidth: 0,
+  },
+  filterTime: {
+    color: '#111111',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  filterLabel: {
+    color: '#111111',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  filterTextActive: {
+    color: '#F8FAFC',
+  },
+  nowCard: {
+    width: 92,
+    height: 94,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255,255,255,0.97)',
+    borderWidth: 1,
+    borderColor: 'rgba(56,189,248,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 'auto',
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 8,
+  },
+  nowText: {
+    color: '#0EA5E9',
+    fontSize: 18,
+    fontWeight: '900',
+    letterSpacing: -0.4,
+  },
+  bottomDock: {
+    position: 'absolute',
+    bottom: 34,
+    left: 18,
+    flexDirection: 'row',
+    gap: 10,
+    zIndex: 35,
+    alignItems: 'center',
+  },
+  dockButton: {
+    width: 54,
+    height: 54,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.96)',
+    borderWidth: 1,
+    borderColor: 'rgba(17,17,17,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#111111',
+    shadowOpacity: 0.12,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 6,
+  },
+  meBubble: {
+    width: 62,
+    height: 62,
+    borderRadius: 20,
+    padding: 3,
+    backgroundColor: '#111827',
+    marginLeft: 6,
+  },
+  meBubbleImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 17,
+    backgroundColor: '#E5E7EB',
+  },
+  momentPin: {
+    width: 48,
+    height: 48,
+    borderRadius: 18,
+    backgroundColor: '#FFFFFF',
+    padding: 3,
+    borderWidth: 2,
+    borderColor: '#F472B6',
+    shadowColor: '#111111',
+    shadowOpacity: 0.16,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
+  },
+  momentImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 13,
+    backgroundColor: '#E5E7EB',
   },
 });

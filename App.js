@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import AppNavigator from './src/presentation/navigation/AppNavigator';
 import { StatusBar } from 'expo-status-bar';
 import { authService } from './src/infrastructure/firebase/authService';
@@ -10,12 +11,19 @@ export default function App() {
   const [initializing, setInitializing] = useState(true);
 
   useEffect(() => {
+    const startupTimeout = setTimeout(() => {
+      setInitializing(false);
+    }, 5000);
+
     const unsubscribe = authService.subscribe((user) => {
       setIsAuthenticated(!!user);
-      if (initializing) setInitializing(false);
+      setInitializing(false);
     });
 
-    return unsubscribe;
+    return () => {
+      clearTimeout(startupTimeout);
+      unsubscribe();
+    };
   }, []);
 
   if (initializing) {
@@ -27,9 +35,11 @@ export default function App() {
   }
 
   return (
-    <NavigationContainer>
-      <StatusBar style="light" />
-      <AppNavigator isAuthenticated={isAuthenticated} />
-    </NavigationContainer>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <NavigationContainer>
+        <StatusBar style="light" />
+        <AppNavigator isAuthenticated={isAuthenticated} />
+      </NavigationContainer>
+    </GestureHandlerRootView>
   );
 }

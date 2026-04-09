@@ -1,15 +1,16 @@
 import React from 'react';
-import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Map, Users, User } from 'lucide-react-native';
+import { createStackNavigator } from '@react-navigation/stack';
+import { Map, MessageCircle, User, Users } from 'lucide-react-native';
 
-// Import Screens
 import WelcomeScreen from '../screens/Auth/WelcomeScreen';
 import LoginScreen from '../screens/Auth/LoginScreen';
 import RegisterScreen from '../screens/Auth/RegisterScreen';
 import ForgotPasswordScreen from '../screens/Auth/ForgotPasswordScreen';
 import MapScreen from '../screens/main/MapScreen';
 import FriendsListScreen from '../screens/main/FriendsListScreen';
+import ChatListScreen from '../screens/main/ChatListScreen';
+import GroupChatScreen from '../screens/main/GroupChatScreen';
 import ProfileScreen from '../screens/main/ProfileScreen';
 import CreateGroupScreen from '../screens/main/CreateGroupScreen';
 
@@ -26,36 +27,44 @@ function MainTabNavigator() {
           borderTopWidth: 1,
           borderTopColor: 'rgba(255,255,255,0.05)',
           height: 70,
-          paddingBottom: 20,
+          paddingBottom: 10,
           paddingTop: 10,
         },
-        tabBarActiveTintColor: '#E848E5',
-        tabBarInactiveTintColor: 'rgba(255,255,255,0.4)',
+        tabBarActiveTintColor: '#38BDF8',
+        tabBarInactiveTintColor: 'rgba(255,255,255,0.45)',
       }}
     >
-      <Tab.Screen 
-        name="Explore" 
-        component={MapScreen} 
+      <Tab.Screen
+        name="Explore"
+        component={MapScreen}
         options={{
           tabBarIcon: ({ color, size }) => <Map color={color} size={size} />,
-          tabBarLabel: 'Khám phá',
-          tabBarStyle: { display: 'none' } // Ẩn tab bar mặc định vì đã có thanh Floating ở MapScreen
+          tabBarLabel: 'Explore',
+          tabBarStyle: { display: 'none' },
         }}
       />
-      <Tab.Screen 
-        name="Friends" 
-        component={FriendsListScreen} 
+      <Tab.Screen
+        name="Friends"
+        component={FriendsListScreen}
         options={{
           tabBarIcon: ({ color, size }) => <Users color={color} size={size} />,
-          tabBarLabel: 'Bạn bè'
+          tabBarLabel: 'Friends',
         }}
       />
-      <Tab.Screen 
-        name="Me" 
-        component={ProfileScreen} 
+      <Tab.Screen
+        name="Chats"
+        component={ChatListScreen}
+        options={{
+          tabBarIcon: ({ color, size }) => <MessageCircle color={color} size={size} />,
+          tabBarLabel: 'Chats',
+        }}
+      />
+      <Tab.Screen
+        name="Profile"
+        component={ProfileScreen}
         options={{
           tabBarIcon: ({ color, size }) => <User color={color} size={size} />,
-          tabBarLabel: 'Tôi'
+          tabBarLabel: 'Profile',
         }}
       />
     </Tab.Navigator>
@@ -76,6 +85,7 @@ export default function AppNavigator({ isAuthenticated }) {
         <>
           <Stack.Screen name="Main" component={MainTabNavigator} />
           <Stack.Screen name="CreateGroup" component={CreateGroupScreen} />
+          <Stack.Screen name="GroupChat" component={GroupChatScreen} />
         </>
       )}
     </Stack.Navigator>

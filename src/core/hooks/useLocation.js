@@ -1,6 +1,55 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import * as Location from 'expo-location';
+import * as Battery from 'expo-battery';
 import { Alert } from 'react-native';
+import { startBackgroundTracking } from '../location/backgroundTracking';
+
+const WATCH_OPTIONS = {
+  accuracy: Location.Accuracy.BestForNavigation,
+  timeInterval: 3000,
+  distanceInterval: 3,
+  mayShowUserSettingsDialog: true,
+};
+
+const MOVING_SPEED_THRESHOLD = 1.6;
+const WALKING_SPEED_THRESHOLD = 0.25;
+
+function getStatusLabel(speed = 0) {
+  if (speed >= MOVING_SPEED_THRESHOLD) {
+    return 'dang chay';
+  }
+
+  if (speed >= WALKING_SPEED_THRESHOLD) {
+    return 'dang di chuyen';
+  }
+
+  return 'dung yen';
+}
+
+function normalizeLocationData(location) {
+  if (!location?.coords) {
+    return null;
+  }
+
+  const safeSpeed = Math.max(location.coords.speed ?? 0, 0);
+
+  return {
+    ...location,
+    coords: {
+      ...location.coords,
+      speed: safeSpeed,
+      heading: location.coords.heading ?? 0,
+      accuracy: location.coords.accuracy ?? null,
+      altitude: location.coords.altitude ?? null,
+    },
+    meta: {
+      speedKmh: safeSpeed * 3.6,
+      status: getStatusLabel(safeSpeed),
+      capturedAt: location.timestamp ?? Date.now(),
+      batteryLevel: location?.meta?.batteryLevel ?? null,
+    },
+  };
+}
 
 export const useLocation = () => {
   const [location, setLocation] = useState(null);
@@ -8,81 +57,63 @@ export const useLocation = () => {
   const [isLoading, setIsLoading] = useState(true);
   const subscriptionRef = useRef(null);
 
-  // Hàm thủ công gọi lấy vị trí một lần
+  const ensurePermission = useCallback(async () => {
+    const providerStatus = await Location.hasServicesEnabledAsync();
+    if (!providerStatus) {
+      setErrorMsg('Dich vu vi tri da bi tat.');
+      Alert.alert(
+        'GPS dang tat',
+        'Vui long bat GPS de ung dung co the cap nhat vi tri theo thoi gian thuc.'
+      );
+      return false;
+    }
+
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') {
+      setErrorMsg('Quyen truy cap vi tri bi tu choi.');
+      Alert.alert(
+        'Quyen truy cap bi tu choi',
+        'Ung dung can quyen vi tri de hien thi ban do va chia se vi tri.'
+      );
+      return false;
+    }
+
+    return true;
+  }, []);
+
   const getLocation = useCallback(async () => {
     setIsLoading(true);
     setErrorMsg(null);
+
     try {
-      // 1. Kiểm tra xem dịch vụ vị trí (GPS) có đang bật không
-      const providerStatus = await Location.hasServicesEnabledAsync();
-      if (!providerStatus) {
-        setErrorMsg('Dịch vụ vị trí đã bị tắt.');
-        Alert.alert(
-          "GPS đang tắt",
-          "Vui lòng bật GPS (Dịch vụ vị trí) trên thiết bị của bạn để ứng dụng hoạt động."
-        );
+      const hasPermission = await ensurePermission();
+      if (!hasPermission) {
         setIsLoading(false);
         return null;
       }
 
-      // 2. Yêu cầu quyền truy cập vị trí Foreground
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        setErrorMsg('Quyền truy cập vị trí bị từ chối.');
-        Alert.alert(
-          "Quyền truy cập bị từ chối",
-          "Ứng dụng cần quyền truy cập vị trí để hoạt động. Vui lòng cấp quyền trong phần Cài đặt."
-        );
-        setIsLoading(false);
-        return null;
-      }
-
-      // 3. Lấy vị trí hiện tại
-      let currentLocation = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High
+      const currentLocation = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.BestForNavigation,
       });
-      setLocation(currentLocation);
-      console.log(`[getLocation] Đã lấy vị trí mới: Lat: ${currentLocation.coords.latitude}, Lng: ${currentLocation.coords.longitude}`);
+      const batteryLevel = await Battery.getBatteryLevelAsync().catch(() => null);
+
+      const normalizedLocation = normalizeLocationData({
+        ...currentLocation,
+        meta: {
+          batteryLevel: batteryLevel == null ? null : Math.round(batteryLevel * 100),
+        },
+      });
+      setLocation(normalizedLocation);
       setIsLoading(false);
-      return currentLocation;
+      return normalizedLocation;
     } catch (error) {
-      console.error("[useLocation] Có lỗi khi lấy vị trí:", error);
+      console.error('[useLocation] Loi lay vi tri:', error);
       setErrorMsg(error.message);
       setIsLoading(false);
       return null;
     }
-  }, []);
+  }, [ensurePermission]);
 
-  // Hàm để bắt đầu theo dõi vị trí liên tục
-  const startWatching = useCallback(async () => {
-    try {
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') return;
-
-      // Xóa subscription cũ nếu đã có
-      if (subscriptionRef.current) {
-        subscriptionRef.current.remove();
-      }
-
-      const subscription = await Location.watchPositionAsync(
-        {
-          accuracy: Location.Accuracy.High,
-          timeInterval: 5000,     // Theo dõi mỗi 5 giây
-          distanceInterval: 10,   // Hoặc người dùng di chuyển 10 mét
-        },
-        (newLocation) => {
-          console.log(`[watchPosition] Cập nhật liên tục: Lat: ${newLocation.coords.latitude}, Lng: ${newLocation.coords.longitude}`);
-          setLocation(newLocation);
-        }
-      );
-      
-      subscriptionRef.current = subscription;
-    } catch (error) {
-      console.log("[useLocation] Không thể bắt đầu theo dõi vị trí:", error);
-    }
-  }, []);
-
-  // Hàm dừng theo dõi
   const stopWatching = useCallback(() => {
     if (subscriptionRef.current) {
       subscriptionRef.current.remove();
@@ -90,25 +121,64 @@ export const useLocation = () => {
     }
   }, []);
 
+  const startWatching = useCallback(async () => {
+    try {
+      const hasPermission = await ensurePermission();
+      if (!hasPermission) {
+        setIsLoading(false);
+        return;
+      }
+
+      stopWatching();
+
+      const subscription = await Location.watchPositionAsync(
+        WATCH_OPTIONS,
+        async (nextLocation) => {
+          const batteryLevel = await Battery.getBatteryLevelAsync().catch(() => null);
+          setLocation(
+            normalizeLocationData({
+              ...nextLocation,
+              meta: {
+                batteryLevel: batteryLevel == null ? null : Math.round(batteryLevel * 100),
+              },
+            })
+          );
+          setIsLoading(false);
+        }
+      );
+
+      subscriptionRef.current = subscription;
+    } catch (error) {
+      console.error('[useLocation] Khong the bat dau theo doi vi tri:', error);
+      setErrorMsg(error.message);
+      setIsLoading(false);
+    }
+  }, [ensurePermission, stopWatching]);
+
   useEffect(() => {
-    // Tự động gọi lần đầu khi mount hook
-    getLocation().then(() => {
-      // Sau khi lấy được lần đầu, bắt đầu theo dõi liên tục
+    let isMounted = true;
+
+    getLocation().then((firstLocation) => {
+      if (!isMounted || !firstLocation) {
+        return;
+      }
+
       startWatching();
+      startBackgroundTracking().catch(() => {});
     });
 
-    // Cleanup khi component bị hủy (unmount)
     return () => {
+      isMounted = false;
       stopWatching();
     };
   }, [getLocation, startWatching, stopWatching]);
 
-  return { 
-    location, 
-    errorMsg, 
-    isLoading, 
-    getLocation, // Cho phép gọi lại từ bên ngoài (ví dụ: nút "Tải lại")
+  return {
+    location,
+    errorMsg,
+    isLoading,
+    getLocation,
     startWatching,
-    stopWatching
+    stopWatching,
   };
 };
