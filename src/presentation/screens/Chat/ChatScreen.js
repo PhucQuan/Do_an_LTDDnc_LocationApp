@@ -9,17 +9,19 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  SafeAreaView
+  SafeAreaView,
+  Image
 } from 'react-native';
-import { ArrowLeft, Send } from 'lucide-react-native';
+import { ArrowLeft, Send, Settings } from 'lucide-react-native';
 import { auth } from '../../../infrastructure/firebase/firebase';
 import { chatService } from '../../../infrastructure/firebase/chatService';
 
 const ChatScreen = ({ route, navigation }) => {
-  const { chatId, title, isGroup } = route.params;
+  const { chatId, isGroup } = route.params;
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(true);
+  const [groupInfo, setGroupInfo] = useState(null);
   const flatListRef = useRef();
 
   const currentUser = auth.currentUser;
@@ -27,6 +29,11 @@ const ChatScreen = ({ route, navigation }) => {
   useEffect(() => {
     // Đánh dấu tất cả là đã đọc khi vào màn hình
     chatService.markAllAsRead(chatId, currentUser.uid);
+
+    // Lấy thông tin nhóm/chat
+    const unsubGroup = chatService.subscribeToGroup(chatId, (data) => {
+      setGroupInfo(data);
+    });
 
     const unsubscribe = chatService.subscribeToMessages(chatId, (newMessages) => {
       setMessages(newMessages);
@@ -36,7 +43,10 @@ const ChatScreen = ({ route, navigation }) => {
       chatService.markAllAsRead(chatId, currentUser.uid);
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      unsubGroup();
+    };
   }, [chatId]);
 
   const handleSend = async () => {
@@ -46,11 +56,14 @@ const ChatScreen = ({ route, navigation }) => {
     setInputText('');
 
     try {
+      // Sử dụng biệt danh nếu có
+      const senderName = groupInfo?.nicknames?.[currentUser.uid] || currentUser.displayName || currentUser.email.split('@')[0];
+
       await chatService.sendMessage(
         chatId,
         textToSend,
         currentUser.uid,
-        currentUser.displayName || currentUser.email.split('@')[0]
+        senderName
       );
     } catch (error) {
       console.error("Error sending message:", error);
@@ -59,6 +72,8 @@ const ChatScreen = ({ route, navigation }) => {
 
   const renderMessage = ({ item }) => {
     const isMine = item.senderId === currentUser.uid;
+    // Hiển thị biệt danh của người gửi trong nhóm
+    const displaySenderName = groupInfo?.nicknames?.[item.senderId] || item.senderName;
 
     return (
       <View style={[
@@ -66,7 +81,7 @@ const ChatScreen = ({ route, navigation }) => {
         isMine ? styles.myMessage : styles.theirMessage
       ]}>
         {!isMine && isGroup && (
-          <Text style={styles.senderName}>{item.senderName}</Text>
+          <Text style={styles.senderName}>{displaySenderName}</Text>
         )}
         <View style={[
           styles.messageBubble,
@@ -78,14 +93,35 @@ const ChatScreen = ({ route, navigation }) => {
     );
   };
 
+  const getChatTitle = () => {
+    if (!groupInfo) return route.params.title;
+    return groupInfo.name;
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <ArrowLeft color="#F8FAFC" size={24} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle} numberOfLines={1}>{title}</Text>
-        <View style={{ width: 40 }} />
+
+        <View style={styles.headerCenter}>
+          {isGroup && groupInfo?.avatarUrl && (
+            <Image source={{ uri: groupInfo.avatarUrl }} style={styles.headerAvatar} />
+          )}
+          <Text style={styles.headerTitle} numberOfLines={1}>{getChatTitle()}</Text>
+        </View>
+
+        {isGroup ? (
+          <TouchableOpacity
+            onPress={() => navigation.navigate('GroupSettings', { chatId })}
+            style={styles.settingsButton}
+          >
+            <Settings color="#F8FAFC" size={24} />
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 40 }} />
+        )}
       </View>
 
       <FlatList
@@ -140,8 +176,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#1E293B',
   },
+  headerCenter: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  headerAvatar: { width: 30, height: 30, borderRadius: 15, marginRight: 8 },
   backButton: { padding: 8 },
-  headerTitle: { color: '#F8FAFC', fontSize: 18, fontWeight: 'bold', flex: 1, textAlign: 'center' },
+  settingsButton: { padding: 8 },
+  headerTitle: { color: '#F8FAFC', fontSize: 18, fontWeight: 'bold', textAlign: 'center' },
   messageList: { padding: 16, paddingBottom: 20 },
   messageContainer: { marginBottom: 12, maxWidth: '80%' },
   myMessage: { alignSelf: 'flex-end' },

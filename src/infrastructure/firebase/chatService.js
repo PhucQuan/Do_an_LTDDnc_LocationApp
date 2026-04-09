@@ -43,6 +43,38 @@ class ChatService {
   }
 
   /**
+   * Cập nhật thông tin nhóm (Tên, Avatar, Nicknames)
+   */
+  async updateGroupInfo(groupId, data) {
+    try {
+      const groupRef = doc(db, "groups", groupId);
+      await updateDoc(groupRef, {
+        ...data,
+        updatedAt: serverTimestamp()
+      });
+    } catch (error) {
+      console.error("Error updating group info:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Đặt biệt danh cho thành viên trong nhóm
+   */
+  async setUserNickname(groupId, userId, nickname) {
+    try {
+      const groupRef = doc(db, "groups", groupId);
+      await updateDoc(groupRef, {
+        [`nicknames.${userId}`]: nickname,
+        updatedAt: serverTimestamp()
+      });
+    } catch (error) {
+      console.error("Error setting nickname:", error);
+      throw error;
+    }
+  }
+
+  /**
    * Lấy hoặc tạo cuộc hội thoại 1-1
    */
   async getOrCreateDirectChat(userId1, userId2) {
@@ -115,6 +147,17 @@ class ChatService {
   }
 
   /**
+   * Subscribe thông tin nhóm cụ thể
+   */
+  subscribeToGroup(groupId, callback) {
+    return onSnapshot(doc(db, "groups", groupId), (doc) => {
+      if (doc.exists()) {
+        callback({ id: doc.id, ...doc.data() });
+      }
+    });
+  }
+
+  /**
    * Gửi tin nhắn
    */
   async sendMessage(groupId, text, senderId, senderName) {
@@ -152,7 +195,6 @@ class ChatService {
   async markAllAsRead(groupId, userId) {
     try {
       const messagesRef = collection(db, "groups", groupId, "messages");
-      const q = query(messagesRef, where("readBy", "not-in", [[userId]])); // Firebase doesn't support not-contains easily for arrays this way
 
       // Lấy các tin nhắn mà user chưa đọc
       const snapshot = await getDocs(messagesRef);

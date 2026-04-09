@@ -12,6 +12,7 @@ import FriendsListScreen from '../screens/main/FriendsListScreen';
 import ProfileScreen from '../screens/main/ProfileScreen';
 import CreateGroupScreen from '../screens/main/CreateGroupScreen';
 import ChatScreen from '../screens/Chat/ChatScreen';
+import GroupSettingsScreen from '../screens/Chat/GroupSettingsScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -70,6 +71,7 @@ export default function AppNavigator({ isAuthenticated }) {
           <Stack.Screen name="Main" component={MainTabNavigator} />
           <Stack.Screen name="CreateGroup" component={CreateGroupScreen} />
           <Stack.Screen name="Chat" component={ChatScreen} />
+          <Stack.Screen name="GroupSettings" component={GroupSettingsScreen} />
         </>
       )}
     </Stack.Navigator>
