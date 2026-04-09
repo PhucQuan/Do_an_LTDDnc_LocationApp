@@ -14,6 +14,7 @@ import {
 } from "firebase/firestore";
 import { FriendUser } from "../../domain/entities/FriendUser";
 import { User } from "../../domain/entities/User";
+import { chatService } from './chatService';
 
 class FriendService {
   /**
@@ -52,17 +53,30 @@ class FriendService {
   }
 
   /**
-   * Chấp nhận yêu cầu kết bạn
+   * Chấp nhận yêu cầu kết bạn và tự động tạo cuộc trò chuyện direct
    */
   async acceptFriendRequest(friendshipId) {
     try {
       const docRef = doc(db, "friendships", friendshipId);
-      await updateDoc(docRef, {
-        status: 'accepted',
-        updatedAt: serverTimestamp()
-      });
-      return true;
+      const docSnap = await getDoc(docRef);
+
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+
+        // Cập nhật trạng thái bạn bè
+        await updateDoc(docRef, {
+          status: 'accepted',
+          updatedAt: serverTimestamp()
+        });
+
+        // Tự động tạo/lấy direct chat để nó hiện trong danh sách trò chuyện
+        await chatService.getOrCreateDirectChat(data.userId1, data.userId2);
+
+        return true;
+      }
+      return false;
     } catch (error) {
+      console.error("Error accepting friend request:", error);
       throw error;
     }
   }

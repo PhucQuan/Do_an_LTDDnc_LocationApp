@@ -1,9 +1,79 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Image, ActivityIndicator } from 'react-native';
 import { Settings, Edit2, MapPin, Navigation, Plus, LogOut } from 'lucide-react-native';
+import { auth, db } from '../../../infrastructure/firebase/firebase';
+import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { authService } from '../../../infrastructure/firebase/authService';
+import * as ImagePicker from 'expo-image-picker';
 
 const ProfileScreen = () => {
+  const [userData, setUserData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [updating, setUpdating] = useState(false);
+
+  useEffect(() => {
+    const currentUid = auth.currentUser.uid;
+
+    const unsubscribe = onSnapshot(doc(db, "users", currentUid), (doc) => {
+      if (doc.exists()) {
+        setUserData(doc.data());
+      }
+      setLoading(false);
+    }, (error) => {
+      console.error("Error fetching user profile:", error);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const handlePickImage = async () => {
+    // Yêu cầu quyền truy cập thư viện ảnh
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (status !== 'granted') {
+      Alert.alert("Quyền truy cập", "Ứng dụng cần quyền truy cập thư viện ảnh để cập nhật avatar.");
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.5,
+      base64: true, // Chúng ta sẽ dùng base64 để đơn giản hóa việc upload cho demo này
+    });
+
+    if (!result.canceled) {
+      updateAvatar(result.assets[0].uri, result.assets[0].base64);
+    }
+  };
+
+  const updateAvatar = async (uri, base64) => {
+    setUpdating(true);
+    try {
+      const currentUid = auth.currentUser.uid;
+      const userRef = doc(db, "users", currentUid);
+
+      // Trong thực tế, bạn nên upload file lên Firebase Storage và lấy URL.
+      // Ở đây để nhanh chóng, mình lưu base64 hoặc giả lập URL nếu chưa có Storage setup.
+      // Lưu ý: Base64 có thể làm document Firestore vượt quá giới hạn 1MB.
+
+      const avatarData = `data:image/jpeg;base64,${base64}`;
+
+      await updateDoc(userRef, {
+        avatarUrl: avatarData
+      });
+
+      Alert.alert("Thành công", "Đã cập nhật ảnh đại diện!");
+    } catch (error) {
+      console.error("Error updating avatar:", error);
+      Alert.alert("Lỗi", "Không thể cập nhật ảnh đại diện.");
+    } finally {
+      setUpdating(false);
+    }
+  };
+
   const handleLogout = () => {
     Alert.alert(
       "Đăng xuất",
@@ -25,6 +95,14 @@ const ProfileScreen = () => {
     );
   };
 
+  if (loading) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#38BDF8" />
+      </View>
+    );
+  }
+
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
@@ -34,16 +112,23 @@ const ProfileScreen = () => {
         
         <View style={styles.profileInfo}>
             <View style={styles.avatarContainer}>
-                <View style={styles.avatar}>
-                    <Text style={styles.avatarText}>A</Text>
-                </View>
-                <TouchableOpacity style={styles.editButton}>
+                <TouchableOpacity style={styles.avatar} onPress={handlePickImage} disabled={updating}>
+                    {updating ? (
+                      <ActivityIndicator color="#38BDF8" />
+                    ) : userData?.avatarUrl ? (
+                      <Image source={{ uri: userData.avatarUrl }} style={styles.avatarImage} />
+                    ) : (
+                      <Text style={styles.avatarText}>{userData?.name ? userData.name[0].toUpperCase() : '?'}</Text>
+                    )}
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.editButton} onPress={handlePickImage} disabled={updating}>
                     <Edit2 color="#fff" size={14} />
                 </TouchableOpacity>
             </View>
-            <Text style={styles.name}>Alex</Text>
+            <Text style={styles.name}>{userData?.name || "Người dùng"}</Text>
+            <Text style={styles.emailText}>{userData?.email}</Text>
             <TouchableOpacity style={styles.copyCode}>
-                <Text style={styles.codeText}>Bumping Code: BUMP123</Text>
+                <Text style={styles.codeText}>Bumping Code: {auth.currentUser.uid.substring(0, 8).toUpperCase()}</Text>
             </TouchableOpacity>
         </View>
       </View>
@@ -62,7 +147,7 @@ const ProfileScreen = () => {
             <View style={styles.statIconContainer}>
                 <Navigation color="#38BDF8" size={30} />
             </View>
-            <Text style={styles.statValue}>120 km</Text>
+            <Text style={styles.statValue}>0 km</Text>
             <Text style={styles.statLabel}>Total Distance Traveled</Text>
         </View>
 
@@ -70,7 +155,7 @@ const ProfileScreen = () => {
             <View style={styles.statIconContainer}>
                 <MapPin color="#38BDF8" size={30} />
             </View>
-            <Text style={styles.statValue}>45</Text>
+            <Text style={styles.statValue}>0</Text>
             <Text style={styles.statLabel}>Places Visited</Text>
         </View>
       </View>
@@ -128,6 +213,11 @@ const styles = StyleSheet.create({
       alignItems: 'center',
       borderWidth: 4,
       borderColor: '#38BDF8',
+      overflow: 'hidden'
+  },
+  avatarImage: {
+      width: '100%',
+      height: '100%',
   },
   avatarText: {
       color: '#fff',
@@ -151,7 +241,12 @@ const styles = StyleSheet.create({
       color: '#F8FAFC',
       fontSize: 24,
       fontWeight: 'bold',
-      marginBottom: 5,
+      marginBottom: 2,
+  },
+  emailText: {
+      color: '#94A3B8',
+      fontSize: 14,
+      marginBottom: 10,
   },
   copyCode: {
       backgroundColor: '#1E293B',

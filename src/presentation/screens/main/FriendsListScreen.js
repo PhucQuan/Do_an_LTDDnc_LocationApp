@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, ActivityIndicator, Alert, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, ActivityIndicator, Alert, ScrollView, Image } from 'react-native';
 import { Search, UserPlus, Check, X, Users, LogOut } from 'lucide-react-native';
 import { BlurView } from 'expo-blur';
 import { db, auth } from '../../../infrastructure/firebase/firebase';
@@ -49,14 +49,13 @@ const FriendsListScreen = ({ navigation }) => {
     });
 
     const unsubGroups = chatService.subscribeToUserGroups(currentUid, async (userGroups) => {
-      // Resolve names for direct chats
       const resolvedGroups = await Promise.all(userGroups.map(async (group) => {
         if (group.isDirect) {
           const otherUid = group.members.find(uid => uid !== currentUid);
           if (otherUid) {
             const userSnap = await getDoc(doc(db, "users", otherUid));
             if (userSnap.exists()) {
-              return { ...group, name: userSnap.data().name };
+              return { ...group, name: userSnap.data().name, avatarUrl: userSnap.data().avatarUrl };
             }
           }
         }
@@ -122,6 +121,21 @@ const FriendsListScreen = ({ navigation }) => {
     }
   };
 
+  const handleStartChat = async (friend) => {
+    try {
+      const currentUid = auth.currentUser.uid;
+      const chatId = await chatService.getOrCreateDirectChat(currentUid, friend.uid);
+      navigation.navigate('Chat', {
+        chatId: chatId,
+        title: friend.name,
+        isGroup: false
+      });
+    } catch (error) {
+      console.error("Error starting chat:", error);
+      Alert.alert("Lỗi", "Không thể bắt đầu trò chuyện.");
+    }
+  };
+
   const handleLeaveGroup = (groupId) => {
     Alert.alert(
       "Rời nhóm",
@@ -147,7 +161,11 @@ const FriendsListScreen = ({ navigation }) => {
   const RequestItem = ({ item }) => (
     <View style={styles.requestCard}>
       <View style={styles.avatarSmall}>
-        <Text style={styles.avatarTextSmall}>{item.sender.name[0]}</Text>
+        {item.sender.avatarUrl ? (
+          <Image source={{ uri: item.sender.avatarUrl }} style={styles.avatarImageSmall} />
+        ) : (
+          <Text style={styles.avatarTextSmall}>{item.sender.name[0]}</Text>
+        )}
       </View>
       <View style={{ flex: 1, marginLeft: 12 }}>
         <Text style={styles.friendName}>{item.sender.name}</Text>
@@ -164,16 +182,20 @@ const FriendsListScreen = ({ navigation }) => {
     </View>
   );
 
-  const FriendItem = ({ item }) => (
-    <View style={styles.friendItem}>
-      <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{item.name ? item.name[0] : '?'}</Text>
-          <View style={[styles.statusDot, { backgroundColor: item.isGhostMode ? '#94A3B8' : '#10B981' }]} />
+  const FriendItemHorizontal = ({ item }) => (
+    <TouchableOpacity style={styles.friendItemHorizontal} onPress={() => handleStartChat(item)}>
+      <View style={styles.avatarLarge}>
+          {item.avatarUrl ? (
+            <Image source={{ uri: item.avatarUrl }} style={styles.avatarImageLarge} />
+          ) : (
+            <View style={[styles.avatarImageLarge, { backgroundColor: '#334155', justifyContent: 'center', alignItems: 'center' }]}>
+              <Text style={styles.avatarText}>{item.name ? item.name[0] : '?'}</Text>
+            </View>
+          )}
+          <View style={[styles.statusDotLarge, { backgroundColor: item.isGhostMode ? '#94A3B8' : '#10B981' }]} />
       </View>
-      <View style={styles.friendInfo}>
-          <Text style={styles.friendName}>{item.name}</Text>
-      </View>
-    </View>
+      <Text style={styles.friendNameHorizontal} numberOfLines={1}>{item.name}</Text>
+    </TouchableOpacity>
   );
 
   const GroupItem = ({ item }) => {
@@ -188,14 +210,18 @@ const FriendsListScreen = ({ navigation }) => {
     }, [item.id]);
 
     return (
-      <View style={styles.friendItem}>
+      <View style={styles.groupItemContainer}>
         <TouchableOpacity
           style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}
           onPress={() => navigation.navigate('Chat', { chatId: item.id, title: item.name, isGroup: !item.isDirect })}
         >
           <View style={[styles.avatar, { backgroundColor: '#1E293B' }]}>
             {item.isDirect ? (
-              <Text style={styles.avatarText}>{item.name ? item.name[0] : '?'}</Text>
+              item.avatarUrl ? (
+                <Image source={{ uri: item.avatarUrl }} style={styles.avatarImageSmall} />
+              ) : (
+                <Text style={styles.avatarText}>{item.name ? item.name[0] : '?'}</Text>
+              )
             ) : (
               <Users color="#38BDF8" size={24} />
             )}
@@ -242,7 +268,7 @@ const FriendsListScreen = ({ navigation }) => {
       <View style={{ paddingHorizontal: 20, marginBottom: 20 }}>
         <BlurView intensity={80} tint="dark" style={styles.searchBar}>
             <Search color="#94A3B8" size={20} />
-            <TextInput 
+            <TextInput
                 placeholder="Tìm bạn qua Email..."
                 placeholderTextColor="#94A3B8"
                 style={styles.searchInput}
@@ -261,7 +287,11 @@ const FriendsListScreen = ({ navigation }) => {
             <Text style={styles.sectionTitle}>Kết quả tìm kiếm</Text>
             <View style={styles.resultCard}>
               <View style={styles.avatarSmall}>
-                <Text style={styles.avatarTextSmall}>{foundUser.name[0]}</Text>
+                {foundUser.avatarUrl ? (
+                  <Image source={{ uri: foundUser.avatarUrl }} style={styles.avatarImageSmall} />
+                ) : (
+                  <Text style={styles.avatarTextSmall}>{foundUser.name[0]}</Text>
+                )}
               </View>
               <View style={{ flex: 1, marginLeft: 12 }}>
                 <Text style={styles.friendName}>{foundUser.name}</Text>
@@ -286,6 +316,21 @@ const FriendsListScreen = ({ navigation }) => {
           </View>
         )}
 
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Bạn bè</Text>
+          {loading ? (
+            <ActivityIndicator size="large" color="#38BDF8" style={{ marginTop: 20 }} />
+          ) : friends.length > 0 ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalFriendsList}>
+              {friends.map(friend => (
+                <FriendItemHorizontal key={friend.uid} item={friend} />
+              ))}
+            </ScrollView>
+          ) : (
+            <Text style={[styles.emptyText, { textAlign: 'left', paddingHorizontal: 20 }]}>Chưa có bạn bè nào.</Text>
+          )}
+        </View>
+
         {groups.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Trò chuyện ({groups.length})</Text>
@@ -294,19 +339,6 @@ const FriendsListScreen = ({ navigation }) => {
             ))}
           </View>
         )}
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Bạn bè ({friends.length})</Text>
-          {loading ? (
-            <ActivityIndicator size="large" color="#38BDF8" style={{ marginTop: 20 }} />
-          ) : friends.length > 0 ? (
-            friends.map(friend => (
-              <FriendItem key={friend.id} item={friend} />
-            ))
-          ) : (
-            <Text style={styles.emptyText}>Chưa có bạn bè nào. Hãy tìm kiếm để kết bạn!</Text>
-          )}
-        </View>
       </ScrollView>
     </View>
   );
@@ -355,19 +387,37 @@ const styles = StyleSheet.create({
   declineBtn: { backgroundColor: '#EF4444', padding: 8, borderRadius: 10 },
   addBtn: { backgroundColor: '#38BDF8', padding: 10, borderRadius: 12 },
   closeBtn: { marginLeft: 10, padding: 5 },
-  friendItem: { flexDirection: 'row', alignItems: 'center', marginBottom: 18, paddingHorizontal: 20 },
+
+  // Horizontal Friends Styles
+  horizontalFriendsList: { paddingHorizontal: 15 },
+  friendItemHorizontal: { alignItems: 'center', marginRight: 15, width: 85 },
+  avatarLarge: {
+    width: 75, height: 75, borderRadius: 37.5,
+    position: 'relative', marginBottom: 8,
+  },
+  avatarImageLarge: { width: '100%', height: '100%', borderRadius: 37.5 },
+  statusDotLarge: {
+    position: 'absolute', bottom: 2, right: 2,
+    width: 20, height: 20, borderRadius: 10,
+    borderWidth: 3, borderColor: '#0F172A'
+  },
+  friendNameHorizontal: { color: '#F8FAFC', fontSize: 13, fontWeight: '400', textAlign: 'center', width: '100%' },
+
+  // Group Item Styles
+  groupItemContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 18, paddingHorizontal: 20 },
   avatar: {
     width: 56, height: 56, borderRadius: 28, backgroundColor: '#1E293B',
-    justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#334155', position: 'relative'
+    justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#334155', position: 'relative',
+    overflow: 'hidden'
   },
-  avatarSmall: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#334155', justifyContent: 'center', alignItems: 'center' },
+  avatarSmall: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#334155', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
+  avatarImageSmall: { width: '100%', height: '100%' },
   avatarText: { color: '#F8FAFC', fontSize: 20, fontWeight: 'bold' },
   avatarTextSmall: { color: '#F8FAFC', fontSize: 16, fontWeight: 'bold' },
-  statusDot: { position: 'absolute', bottom: 2, right: 2, width: 14, height: 14, borderRadius: 7, borderWidth: 2, borderColor: '#0F172A' },
   friendInfo: { flex: 1, marginLeft: 15 },
   friendName: { color: '#F8FAFC', fontSize: 17, fontWeight: 'bold', marginBottom: 2 },
   friendStatus: { color: '#94A3B8', fontSize: 13 },
-  emptyText: { color: '#64748B', textAlign: 'center', marginTop: 20, fontSize: 14, paddingHorizontal: 40 },
+  emptyText: { color: '#64748B', marginTop: 10, fontSize: 14 },
   leaveBtn: { padding: 10, backgroundColor: 'rgba(239, 68, 68, 0.1)', borderRadius: 12 },
   unreadBadge: { backgroundColor: '#38BDF8', minWidth: 20, height: 20, borderRadius: 10, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 6, marginLeft: 10 },
   unreadBadgeText: { color: '#0F172A', fontSize: 11, fontWeight: 'bold' },
