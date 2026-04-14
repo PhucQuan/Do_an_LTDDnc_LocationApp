@@ -35,9 +35,9 @@ export default function App() {
   }
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#0F172A' }}>
       <NavigationContainer>
-        <StatusBar style="light" />
+        <StatusBar style="light" backgroundColor="#0F172A" />
         <AppNavigator isAuthenticated={isAuthenticated} />
       </NavigationContainer>
     </GestureHandlerRootView>

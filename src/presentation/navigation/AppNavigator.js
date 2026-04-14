@@ -23,7 +23,7 @@ function MainTabNavigator() {
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: '#0D0D1A',
+          backgroundColor: '#0F172A',
           borderTopWidth: 1,
           borderTopColor: 'rgba(255,255,255,0.05)',
           height: 70,
@@ -31,7 +31,7 @@ function MainTabNavigator() {
           paddingTop: 10,
         },
         tabBarActiveTintColor: '#38BDF8',
-        tabBarInactiveTintColor: 'rgba(255,255,255,0.45)',
+        tabBarInactiveTintColor: 'rgba(148,163,184,0.6)',
       }}
     >
       <Tab.Screen
@@ -40,7 +40,7 @@ function MainTabNavigator() {
         options={{
           tabBarIcon: ({ color, size }) => <Map color={color} size={size} />,
           tabBarLabel: 'Explore',
-          tabBarStyle: { display: 'none' },
+          tabBarStyle: { display: 'none' }, // Hiding tab bar on map screen for full screen feel
         }}
       />
       <Tab.Screen

@@ -20,7 +20,7 @@ const MIN_HISTORY_DISTANCE_METERS = 8;
 const HISTORY_FLUSH_INTERVAL_MS = 30 * 60 * 1000;
 const MAX_BUFFER_POINTS = 25;
 const HISTORY_COLLECTION = 'locations_history';
-const HISTORY_RETENTION_DAYS = 21;
+const HISTORY_RETENTION_DAYS = 49;
 
 function getDistanceMeters(lat1, lon1, lat2, lon2) {
   const earthRadius = 6371000;
@@ -34,16 +34,16 @@ function getDistanceMeters(lat1, lon1, lat2, lon2) {
   return earthRadius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function getStatusFromSpeed(speed = 0) {
+function getStatusFromSpeed(speed = 0, lastStationaryAt = null) {
   if (speed >= 1.6) {
-    return 'dang chay';
+    return 'running';
   }
 
   if (speed >= 0.25) {
-    return 'dang di chuyen';
+    return 'moving';
   }
 
-  return 'dung yen';
+  return 'still';
 }
 
 function getInitials(name = '?') {
@@ -101,22 +101,22 @@ function normalizeCoords(coords) {
 
 function formatRelativeTime(timestamp) {
   if (!timestamp) {
-    return 'vua cap nhat';
+    return 'just now';
   }
 
   const diffMs = Date.now() - timestamp;
   const minutes = Math.max(Math.floor(diffMs / 60000), 0);
 
   if (minutes < 1) {
-    return 'vua xong';
+    return 'just now';
   }
 
   if (minutes < 60) {
-    return `${minutes} phut`;
+    return `${minutes}m ago`;
   }
 
   const hours = Math.floor(minutes / 60);
-  return `${hours} gio`;
+  return `${hours}h ago`;
 }
 
 class LocationService {
@@ -127,6 +127,7 @@ class LocationService {
     this._lastBufferedPoint = null;
     this._flushTimer = null;
     this._cachedProfile = null;
+    this._lastStationaryAt = null;
   }
 
   async _getCurrentUser() {
@@ -143,7 +144,7 @@ class LocationService {
           userSnapshot.data()?.name ||
           firebaseUser.displayName ||
           firebaseUser.email?.split('@')[0] ||
-          'Ban',
+          'Bạn',
         avatarUrl:
           userSnapshot.data()?.avatarUrl ||
           firebaseUser.photoURL ||
@@ -225,24 +226,36 @@ class LocationService {
         return false;
       }
 
+      const now = Date.now();
+      if (coords.speed < 0.25) {
+        if (!this._lastStationaryAt) {
+          this._lastStationaryAt = now;
+        }
+      } else {
+        this._lastStationaryAt = null;
+      }
+
+      const statusInfo = getStatusFromSpeed(coords.speed, this._lastStationaryAt);
+
       const realtimePayload = {
         ...coords,
         uid: currentUser.uid,
         displayName: currentUser.displayName,
         initials: currentUser.initials,
         avatarUrl: currentUser.avatarUrl,
-        status: getStatusFromSpeed(coords.speed),
+        status: statusInfo,
         speedKmh: Number((coords.speed * 3.6).toFixed(1)),
         batteryLevel:
           location?.meta?.batteryLevel ??
           currentUser.batteryLevel ??
           null,
-        updatedAt: Date.now(),
+        stationarySince: statusInfo === 'still' ? this._lastStationaryAt : null,
+        updatedAt: now,
       };
 
       await set(await this._getUserRef(), realtimePayload);
       this._lastPushedPayload = coords;
-      this._lastPushAt = Date.now();
+      this._lastPushAt = now;
       this.bufferHistoryPoint(location);
       return true;
     } catch (error) {
