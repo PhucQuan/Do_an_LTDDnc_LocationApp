@@ -69,7 +69,7 @@ class AuthService {
   /**
    * ĐĂNG KÝ: Bước 2 - Xác nhận OTP và CHỈ tạo tài khoản khi OTP đúng
    */
-  async verifyAndRegister(email, password, fullName, phoneNumber, otp) {
+  async verifyAndRegister(email, password, fullName, phoneNumber, username, otp) {
     try {
       const otpDocRef = doc(db, "register_otps", email);
       const otpDoc = await getDoc(otpDocRef);
@@ -84,7 +84,7 @@ class AuthService {
       }
 
       // CHỈ KHI ĐÚNG OTP MỚI GỌI HÀM TẠO USER
-      const user = await this.register(email, password, fullName, phoneNumber);
+      const user = await this.register(email, password, fullName, phoneNumber, username);
 
       // Xóa mã OTP sau khi sử dụng thành công
       await deleteDoc(otpDocRef);
@@ -99,7 +99,7 @@ class AuthService {
   /**
    * Logic tạo User trên Firebase Auth & Firestore (Hàm nội bộ)
    */
-  async register(email, password, fullName, phoneNumber) {
+  async register(email, password, fullName, phoneNumber, username) {
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const firebaseUser = userCredential.user;
@@ -109,6 +109,7 @@ class AuthService {
         name: fullName,
         email: firebaseUser.email,
         phone: phoneNumber,
+        username: username,
       });
 
       await setDoc(doc(db, "users", firebaseUser.uid), {

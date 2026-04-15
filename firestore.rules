@@ -48,13 +48,13 @@ service cloud.firestore {
     }
 
     match /locations_history/{historyId} {
-      allow read: if canSeeUser(resource.data.uid);
+      allow read: if signedIn();
       allow create: if isOwner(request.resource.data.uid);
       allow update, delete: if isOwner(resource.data.uid);
     }
 
     match /moments/{momentId} {
-      allow read: if canSeeUser(resource.data.userId);
+      allow read: if signedIn();
       allow create: if isOwner(request.resource.data.userId);
       allow update, delete: if isOwner(resource.data.userId);
     }

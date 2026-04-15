@@ -1,8 +1,13 @@
 import React from 'react';
+import { Text, View } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { createStackNavigator } from '@react-navigation/stack';
-import { Map, MessageCircle, User, Users } from 'lucide-react-native';
-
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import {
+  CircleUserRound,
+  Map,
+  MessageCircle,
+  Users,
+} from 'lucide-react-native';
 import WelcomeScreen from '../screens/Auth/WelcomeScreen';
 import LoginScreen from '../screens/Auth/LoginScreen';
 import RegisterScreen from '../screens/Auth/RegisterScreen';
@@ -10,84 +15,130 @@ import ForgotPasswordScreen from '../screens/Auth/ForgotPasswordScreen';
 import MapScreen from '../screens/main/MapScreen';
 import FriendsListScreen from '../screens/main/FriendsListScreen';
 import ChatListScreen from '../screens/main/ChatListScreen';
-import GroupChatScreen from '../screens/main/GroupChatScreen';
 import ProfileScreen from '../screens/main/ProfileScreen';
+import AddFriendScreen from '../screens/main/AddFriendScreen';
 import CreateGroupScreen from '../screens/main/CreateGroupScreen';
+import GroupChatScreen from '../screens/main/GroupChatScreen';
+import PrivacySettingsScreen from '../screens/main/PrivacySettingsScreen';
+import GiftCenterScreen from '../screens/main/GiftCenterScreen';
+import { COLORS, SHADOW } from '../theme';
 
-const Stack = createStackNavigator();
+const RootStack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
+const MainStack = createNativeStackNavigator();
 
-function MainTabNavigator() {
+function TabIcon({ focused, label, Icon }) {
+  return (
+    <View
+      style={{
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 4,
+        minWidth: 68,
+      }}
+    >
+      <View
+        style={{
+          width: 44,
+          height: 44,
+          borderRadius: 18,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: focused ? COLORS.ink : 'transparent',
+        }}
+      >
+        <Icon color={focused ? COLORS.white : COLORS.textMuted} size={21} />
+      </View>
+      <Text
+        style={{
+          fontSize: 11,
+          fontWeight: '800',
+          color: focused ? COLORS.textPrimary : COLORS.textMuted,
+        }}
+      >
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+function MainTabs() {
   return (
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
+        tabBarShowLabel: false,
         tabBarStyle: {
-          backgroundColor: '#0F172A',
-          borderTopWidth: 1,
-          borderTopColor: 'rgba(255,255,255,0.05)',
-          height: 70,
+          position: 'absolute',
+          left: 14,
+          right: 14,
+          bottom: 14,
+          height: 82,
+          paddingTop: 12,
           paddingBottom: 10,
-          paddingTop: 10,
+          borderRadius: 28,
+          backgroundColor: 'rgba(255,255,255,0.94)',
+          borderTopWidth: 0,
+          ...SHADOW.card,
         },
-        tabBarActiveTintColor: '#38BDF8',
-        tabBarInactiveTintColor: 'rgba(148,163,184,0.6)',
       }}
     >
       <Tab.Screen
-        name="Explore"
+        name="Map"
         component={MapScreen}
         options={{
-          tabBarIcon: ({ color, size }) => <Map color={color} size={size} />,
-          tabBarLabel: 'Explore',
-          tabBarStyle: { display: 'none' }, // Hiding tab bar on map screen for full screen feel
+          tabBarIcon: ({ focused }) => <TabIcon focused={focused} label="Map" Icon={Map} />,
         }}
       />
       <Tab.Screen
         name="Friends"
         component={FriendsListScreen}
         options={{
-          tabBarIcon: ({ color, size }) => <Users color={color} size={size} />,
-          tabBarLabel: 'Friends',
+          tabBarIcon: ({ focused }) => <TabIcon focused={focused} label="Friends" Icon={Users} />,
         }}
       />
       <Tab.Screen
         name="Chats"
         component={ChatListScreen}
         options={{
-          tabBarIcon: ({ color, size }) => <MessageCircle color={color} size={size} />,
-          tabBarLabel: 'Chats',
+          tabBarIcon: ({ focused }) => <TabIcon focused={focused} label="Chats" Icon={MessageCircle} />,
         }}
       />
       <Tab.Screen
         name="Profile"
         component={ProfileScreen}
         options={{
-          tabBarIcon: ({ color, size }) => <User color={color} size={size} />,
-          tabBarLabel: 'Profile',
+          tabBarIcon: ({ focused }) => <TabIcon focused={focused} label="Profile" Icon={CircleUserRound} />,
         }}
       />
     </Tab.Navigator>
   );
 }
 
-export default function AppNavigator({ isAuthenticated }) {
+function AuthStack() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      {!isAuthenticated ? (
-        <>
-          <Stack.Screen name="Welcome" component={WelcomeScreen} />
-          <Stack.Screen name="Login" component={LoginScreen} />
-          <Stack.Screen name="Register" component={RegisterScreen} />
-          <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
-        </>
-      ) : (
-        <>
-          <Stack.Screen name="Main" component={MainTabNavigator} />
-          <Stack.Screen name="CreateGroup" component={CreateGroupScreen} />
-          <Stack.Screen name="GroupChat" component={GroupChatScreen} />
-        </>
-      )}
-    </Stack.Navigator>
+    <RootStack.Navigator screenOptions={{ headerShown: false }}>
+      <RootStack.Screen name="Welcome" component={WelcomeScreen} />
+      <RootStack.Screen name="Login" component={LoginScreen} />
+      <RootStack.Screen name="Register" component={RegisterScreen} />
+      <RootStack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+    </RootStack.Navigator>
   );
+}
+
+function AuthenticatedStack() {
+  return (
+    <MainStack.Navigator screenOptions={{ headerShown: false }}>
+      <MainStack.Screen name="MainTabs" component={MainTabs} />
+      <MainStack.Screen name="AddFriend" component={AddFriendScreen} />
+      <MainStack.Screen name="CreateGroup" component={CreateGroupScreen} />
+      <MainStack.Screen name="GroupChat" component={GroupChatScreen} />
+      <MainStack.Screen name="PrivacySettings" component={PrivacySettingsScreen} />
+      <MainStack.Screen name="GiftCenter" component={GiftCenterScreen} />
+    </MainStack.Navigator>
+  );
+}
+
+export default function AppNavigator({ isAuthenticated }) {
+  return isAuthenticated ? <AuthenticatedStack /> : <AuthStack />;
 }

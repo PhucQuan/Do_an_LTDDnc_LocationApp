@@ -119,6 +119,17 @@ class FriendService {
     if (querySnapshot.empty) return null;
     return User.fromFirestore(querySnapshot.docs[0]);
   }
+
+  /**
+   * Tìm kiếm hệ thống qua Username
+   */
+  async searchUserByUsername(username) {
+    const usersRef = collection(db, "users");
+    const q = query(usersRef, where("username", "==", username.toLowerCase().trim()));
+    const querySnapshot = await getDocs(q);
+    if (querySnapshot.empty) return null;
+    return User.fromFirestore(querySnapshot.docs[0]);
+  }
 }
 
 export const friendService = new FriendService();

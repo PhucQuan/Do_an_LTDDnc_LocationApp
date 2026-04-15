@@ -1,34 +1,31 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, Image, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { BatteryFull, MessageCircle, X } from 'lucide-react-native';
+import { COLORS, SHADOW } from '../../theme';
+
+const EMOJIS = ['Hi', 'Love', 'Fire', 'Haha', 'Eyes'];
+const EMOJI_LABEL = {
+  Hi: 'Wave',
+  Love: 'Love',
+  Fire: 'Fire',
+  Haha: 'Laugh',
+  Eyes: 'Look',
+};
 
 function formatRelativeTime(timestamp) {
-  if (!timestamp) {
-    return 'just now';
-  }
-
+  if (!timestamp) return 'just now';
   const diffMs = Date.now() - Number(timestamp);
   const minutes = Math.max(0, Math.floor(diffMs / 60000));
-
-  if (minutes < 1) {
-    return 'just now';
-  }
-
-  if (minutes < 60) {
-    return `${minutes} min ago`;
-  }
-
-  const hours = Math.floor(minutes / 60);
-  return `${hours}h ago`;
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes} min ago`;
+  return `${Math.floor(minutes / 60)}h ago`;
 }
 
 function getFallbackAvatar(name) {
-  return `https://ui-avatars.com/api/?name=${encodeURIComponent(
-    name || 'Friend'
-  )}&background=0F172A&color=FFFFFF&size=256`;
+  return `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'Friend')}&background=ffffff&color=1d4ed8&size=256`;
 }
 
-export function SelectedUserSheet({ user, onClose, onChat }) {
+export function SelectedUserSheet({ user, onClose, onChat, onInteract }) {
   const translateY = useRef(new Animated.Value(420)).current;
 
   useEffect(() => {
@@ -39,9 +36,7 @@ export function SelectedUserSheet({ user, onClose, onChat }) {
     }).start();
   }, [translateY, user]);
 
-  if (!user) {
-    return null;
-  }
+  if (!user) return null;
 
   return (
     <>
@@ -53,15 +48,34 @@ export function SelectedUserSheet({ user, onClose, onChat }) {
           <View style={styles.identityRow}>
             <Image source={{ uri: user.avatarUrl || getFallbackAvatar(user.displayName) }} style={styles.avatar} />
             <View style={{ flex: 1 }}>
-              <Text style={styles.name}>{user.displayName}</Text>
-              <Text style={styles.handle}>@{(user.displayName || 'friend').replace(/\s+/g, '').toLowerCase()}</Text>
+              <Text style={styles.name}>{user.displayName || 'Friend'}</Text>
+              <Text style={styles.handle}>
+                @{(user.displayName || 'friend').replace(/\s+/g, '').toLowerCase()}
+              </Text>
             </View>
           </View>
-
           <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-            <X color="#111111" size={16} />
+            <X color={COLORS.textPrimary} size={16} />
           </TouchableOpacity>
         </View>
+
+        {onInteract ? (
+          <View style={styles.emojiRow}>
+            {EMOJIS.map((emoji) => (
+              <TouchableOpacity
+                key={emoji}
+                style={styles.emojiButton}
+                onPress={() => {
+                  onInteract(emoji);
+                  onClose();
+                }}
+                activeOpacity={0.75}
+              >
+                <Text style={styles.emojiText}>{EMOJI_LABEL[emoji]}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        ) : null}
 
         <View style={styles.metricsRow}>
           <View style={styles.metricCard}>
@@ -70,7 +84,7 @@ export function SelectedUserSheet({ user, onClose, onChat }) {
           </View>
           <View style={styles.metricCard}>
             <View style={styles.metricIconRow}>
-              <BatteryFull color="#111111" size={16} />
+              <BatteryFull color={COLORS.textPrimary} size={16} />
               <Text style={styles.metricValue}>{Math.max(Number(user.batteryLevel || 0), 0).toFixed(0)}%</Text>
             </View>
             <Text style={styles.metricLabel}>battery</Text>
@@ -82,8 +96,8 @@ export function SelectedUserSheet({ user, onClose, onChat }) {
         </View>
 
         <TouchableOpacity style={styles.chatButton} onPress={() => onChat(user)}>
-          <MessageCircle color="#FFFFFF" size={18} />
-          <Text style={styles.chatText}>Chat</Text>
+          <MessageCircle color={COLORS.white} size={18} />
+          <Text style={styles.chatText}>Open chat</Text>
         </TouchableOpacity>
       </Animated.View>
     </>
@@ -91,10 +105,7 @@ export function SelectedUserSheet({ user, onClose, onChat }) {
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(15,23,42,0.22)',
-  },
+  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(15,23,42,0.16)' },
   sheet: {
     position: 'absolute',
     left: 12,
@@ -105,11 +116,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingTop: 12,
     paddingBottom: 18,
-    shadowColor: '#111111',
-    shadowOpacity: 0.18,
-    shadowRadius: 22,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 10,
+    ...SHADOW.card,
   },
   grabber: {
     width: 54,
@@ -135,15 +142,15 @@ const styles = StyleSheet.create({
     width: 58,
     height: 58,
     borderRadius: 20,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: COLORS.bgSoft,
   },
   name: {
-    color: '#111111',
+    color: COLORS.textPrimary,
     fontSize: 20,
     fontWeight: '900',
   },
   handle: {
-    color: '#64748B',
+    color: COLORS.textMuted,
     fontSize: 13,
     marginTop: 4,
   },
@@ -151,9 +158,33 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: '#F4F4F5',
+    backgroundColor: COLORS.bgSoft,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  emojiRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 14,
+    backgroundColor: COLORS.bgInput,
+    borderRadius: 20,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+  },
+  emojiButton: {
+    minWidth: 54,
+    height: 46,
+    borderRadius: 23,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  emojiText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: COLORS.textPrimary,
   },
   metricsRow: {
     flexDirection: 'row',
@@ -164,7 +195,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 76,
     borderRadius: 20,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: COLORS.bgInput,
     padding: 12,
     justifyContent: 'space-between',
   },
@@ -174,12 +205,12 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   metricValue: {
-    color: '#111111',
+    color: COLORS.textPrimary,
     fontSize: 16,
     fontWeight: '900',
   },
   metricLabel: {
-    color: '#64748B',
+    color: COLORS.textMuted,
     fontSize: 12,
     fontWeight: '700',
     textTransform: 'uppercase',
@@ -188,14 +219,14 @@ const styles = StyleSheet.create({
     marginTop: 16,
     minHeight: 54,
     borderRadius: 20,
-    backgroundColor: '#111827',
+    backgroundColor: COLORS.ink,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
   },
   chatText: {
-    color: '#FFFFFF',
+    color: COLORS.white,
     fontSize: 15,
     fontWeight: '900',
   },

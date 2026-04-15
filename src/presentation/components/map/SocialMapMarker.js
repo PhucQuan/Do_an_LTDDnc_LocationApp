@@ -1,24 +1,25 @@
 import React, { memo, useEffect, useRef } from 'react';
 import { Animated, Image, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Battery, BatteryCharging, BatteryLow, BatteryMedium } from 'lucide-react-native';
+import { Battery, BatteryLow, BatteryMedium } from 'lucide-react-native';
+import { COLORS } from '../../theme';
 
 function getFallbackAvatar(name) {
   return `https://ui-avatars.com/api/?name=${encodeURIComponent(
     name || 'Friend'
-  )}&background=0F172A&color=FFFFFF&size=256`;
+  )}&background=ffffff&color=1d4ed8&size=256`;
 }
 
 function getRingColors(status, isGhostMode) {
   if (isGhostMode) {
-    return ['#A1A1AA', '#71717A'];
-  }
-
-  if (status === 'offline') {
     return ['#CBD5E1', '#94A3B8'];
   }
 
-  return ['#22C55E', '#38BDF8'];
+  if (status === 'offline') {
+    return ['#E2E8F0', '#CBD5E1'];
+  }
+
+  return [COLORS.green, COLORS.accent];
 }
 
 function getPresenceLabel(lastUpdatedAt) {
@@ -33,24 +34,24 @@ function formatStationaryTime(timestamp) {
   if (!timestamp) return null;
   const diffMs = Date.now() - timestamp;
   const minutes = Math.floor(diffMs / 60000);
-  
-  if (minutes < 5) return null; // Don't show if stationary for less than 5 minutes
+
+  if (minutes < 5) return null;
   if (minutes < 60) return `${minutes}m`;
   return `${Math.floor(minutes / 60)}h`;
 }
 
 function BatteryIndicator({ level }) {
   if (level == null) return null;
-  
+
   let Icon = Battery;
-  let color = '#22C55E';
-  
+  let color = COLORS.green;
+
   if (level <= 20) {
     Icon = BatteryLow;
-    color = '#EF4444';
+    color = COLORS.danger;
   } else if (level <= 50) {
     Icon = BatteryMedium;
-    color = '#F59E0B';
+    color = COLORS.warning;
   }
 
   return (
@@ -67,15 +68,17 @@ function SocialMapMarkerComponent({
   speedKmh = 0,
   batteryLevel,
   stationarySince,
-  bubbleAccent = ['#38BDF8', '#818CF8', '#C084FC'],
+  bubbleAccent = [COLORS.accent, COLORS.purple, COLORS.pink],
   lastUpdatedAt,
   isGhostMode = false,
   showSpeed = true,
+  isMe = false,
+  isSelected = false,
 }) {
   const presence = getPresenceLabel(lastUpdatedAt);
   const isActive = presence === 'online' && !isGhostMode;
   const pulse = useRef(new Animated.Value(0)).current;
-  
+  const float = useRef(new Animated.Value(0)).current;
   const stationaryText = formatStationaryTime(stationarySince);
 
   useEffect(() => {
@@ -88,14 +91,39 @@ function SocialMapMarkerComponent({
     );
 
     if (isActive && speedKmh > 1) {
-       loop.start();
+      loop.start();
     } else {
-       pulse.setValue(0);
-       loop.stop();
+      pulse.setValue(0);
+      loop.stop();
     }
-    
+
     return () => loop.stop();
-  }, [pulse, isActive, speedKmh]);
+  }, [isActive, pulse, speedKmh]);
+
+  useEffect(() => {
+    if (!isMe) {
+      float.setValue(0);
+      return undefined;
+    }
+
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(float, {
+          toValue: 1,
+          duration: 1800,
+          useNativeDriver: true,
+        }),
+        Animated.timing(float, {
+          toValue: 0,
+          duration: 1800,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    loop.start();
+    return () => loop.stop();
+  }, [float, isMe]);
 
   const pulseStyle = {
     opacity: isActive
@@ -116,36 +144,76 @@ function SocialMapMarkerComponent({
     ],
   };
 
+  const floatStyle = isMe
+    ? {
+        transform: [
+          {
+            translateY: float.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0, -5],
+            }),
+          },
+        ],
+      }
+    : null;
+
   return (
-    <View style={styles.wrap}>
+    <Animated.View style={[styles.wrap, floatStyle, isSelected && !isMe && styles.wrapSelected]}>
+      {isMe ? (
+        <View style={styles.youTag}>
+          <Text style={styles.youTagText}>YOU</Text>
+        </View>
+      ) : null}
+
       {stationaryText ? (
         <View style={styles.stationaryTag}>
           <Text style={styles.stationaryText}>{stationaryText}</Text>
         </View>
       ) : showSpeed && speedKmh >= 1 ? (
-        <View style={[styles.speedTag, { backgroundColor: isGhostMode ? '#71717A' : '#1E293B' }]}>
+        <View style={styles.speedTag}>
           <Text style={styles.speedText}>{`${Math.max(Number(speedKmh || 0), 0).toFixed(0)} km/h`}</Text>
         </View>
       ) : null}
 
-      <Animated.View style={[styles.pulse, pulseStyle]} />
+      <Animated.View
+        style={[
+          styles.pulse,
+          pulseStyle,
+          isMe && {
+            backgroundColor: COLORS.meGlow,
+            width: 96,
+            height: 96,
+            borderRadius: 48,
+          },
+        ]}
+      />
+      <LinearGradient
+        colors={bubbleAccent}
+        style={[
+          styles.glow,
+          !isMe && isSelected && styles.glowSelected,
+          isMe && {
+            width: 88,
+            height: 88,
+            borderRadius: 44,
+            opacity: 0.82,
+          },
+        ]}
+      />
 
-      <LinearGradient colors={bubbleAccent} style={styles.glow} />
-
-      <LinearGradient colors={getRingColors(presence, isGhostMode)} style={styles.ring}>
-        <View style={styles.innerShell}>
+      <LinearGradient
+        colors={isMe ? [COLORS.white, COLORS.me] : getRingColors(presence, isGhostMode)}
+        style={[styles.ring, isMe && styles.ringMe, !isMe && isSelected && styles.ringSelected, !isMe && !isActive && styles.ringIdle]}
+      >
+        <View style={[styles.innerShell, isMe && styles.innerShellMe]}>
           <Image source={{ uri: avatarUrl || getFallbackAvatar(name) }} style={styles.image} />
         </View>
       </LinearGradient>
 
-      {batteryLevel != null && !isGhostMode && (
-         <BatteryIndicator level={batteryLevel} />
-      )}
-      
-      {isGhostMode && (
-         <View style={[styles.dot, { backgroundColor: '#94A3B8' }]} />
-      )}
-    </View>
+      {batteryLevel != null && !isGhostMode ? <BatteryIndicator level={batteryLevel} /> : null}
+
+      <View style={[styles.dot, { backgroundColor: isGhostMode ? COLORS.offline : COLORS.online }]} />
+    </Animated.View>
   );
 }
 
@@ -155,7 +223,27 @@ const styles = StyleSheet.create({
   wrap: {
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 10,
+    padding: 12,
+  },
+  wrapSelected: {
+    zIndex: 20,
+  },
+  youTag: {
+    position: 'absolute',
+    top: -28,
+    paddingHorizontal: 10,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: COLORS.ink,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 12,
+  },
+  youTagText: {
+    color: COLORS.white,
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.7,
   },
   speedTag: {
     position: 'absolute',
@@ -165,14 +253,15 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     zIndex: 10,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    shadowColor: '#000000',
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
+    borderColor: COLORS.border,
+    backgroundColor: 'rgba(15,23,42,0.86)',
+    shadowColor: COLORS.shadow,
+    shadowOpacity: 0.18,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
   },
   speedText: {
-    color: '#F8FAFC',
+    color: COLORS.white,
     fontSize: 12,
     fontWeight: '900',
   },
@@ -182,36 +271,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 999,
-    backgroundColor: '#334155',
+    backgroundColor: COLORS.inkSoft,
     zIndex: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    shadowColor: '#000000',
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
   },
   stationaryText: {
-    color: '#CBD5E1',
+    color: COLORS.white,
     fontSize: 11,
     fontWeight: '800',
   },
   batteryBadge: {
     position: 'absolute',
-    bottom: 2,
-    backgroundColor: '#0F172A',
+    bottom: 1,
+    backgroundColor: COLORS.white,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 6,
     paddingVertical: 3,
     borderRadius: 8,
-    borderWidth: 1.5,
-    borderColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: COLORS.border,
     gap: 2,
-    shadowColor: '#000000',
-    shadowOpacity: 0.4,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
   },
   batteryText: {
     fontSize: 10,
@@ -222,7 +301,7 @@ const styles = StyleSheet.create({
     width: 76,
     height: 76,
     borderRadius: 38,
-    backgroundColor: 'rgba(56,189,248,0.4)',
+    backgroundColor: COLORS.accentGlow,
   },
   glow: {
     position: 'absolute',
@@ -231,37 +310,68 @@ const styles = StyleSheet.create({
     borderRadius: 36,
     opacity: 0.35,
   },
+  glowSelected: {
+    width: 82,
+    height: 82,
+    borderRadius: 41,
+    opacity: 0.62,
+  },
   ring: {
     width: 64,
     height: 64,
     borderRadius: 32,
     padding: 3,
-    shadowColor: '#000000',
-    shadowOpacity: 0.3,
+    shadowColor: COLORS.shadow,
+    shadowOpacity: 0.2,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
+  },
+  ringSelected: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    padding: 4,
+    shadowOpacity: 0.28,
+    shadowRadius: 14,
     elevation: 8,
+  },
+  ringIdle: {
+    opacity: 0.82,
+  },
+  ringMe: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    padding: 4,
+    shadowOpacity: 0.32,
+    shadowRadius: 16,
+    elevation: 10,
   },
   innerShell: {
     flex: 1,
-    borderRadius: 29,
-    backgroundColor: '#0F172A',
-    padding: 3,
+    borderRadius: 34,
+    backgroundColor: COLORS.white,
+    padding: 3.5,
+  },
+  innerShellMe: {
+    borderRadius: 40,
+    padding: 4,
   },
   image: {
     width: '100%',
     height: '100%',
-    borderRadius: 26,
-    backgroundColor: '#334155',
+    borderRadius: 31,
+    backgroundColor: COLORS.bgSoft,
   },
   dot: {
     position: 'absolute',
-    right: 12,
-    bottom: 12,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
+    right: 10,
+    bottom: 10,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 2.5,
+    borderColor: COLORS.white,
   },
 });

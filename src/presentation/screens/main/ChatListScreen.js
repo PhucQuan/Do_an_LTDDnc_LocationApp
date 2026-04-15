@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -7,253 +7,232 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { MessageCircle, Sparkles, Users } from 'lucide-react-native';
+import { ChevronRight, Gift, MessageCircle, Plus, Users } from 'lucide-react-native';
 import { auth } from '../../../infrastructure/firebase/firebase';
 import { chatService } from '../../../infrastructure/firebase/chatService';
-
-function getAccent(index) {
-  const colors = ['#F472B6', '#38BDF8', '#FACC15', '#34D399'];
-  return colors[index % colors.length];
-}
+import { COLORS, SHADOW } from '../../theme';
 
 export default function ChatListScreen({ navigation }) {
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const currentUid = auth.currentUser?.uid;
-    if (!currentUid) {
-      setLoading(false);
-      return undefined;
-    }
-
-    const unsubscribe = chatService.subscribeToUserGroups(currentUid, (nextGroups) => {
-      setGroups(nextGroups);
+    const uid = auth.currentUser?.uid;
+    if (!uid) return undefined;
+    return chatService.subscribeToUserGroups(uid, (list) => {
+      setGroups(list);
       setLoading(false);
     });
-
-    return () => unsubscribe();
   }, []);
 
-  const totalMembers = useMemo(
-    () => groups.reduce((sum, group) => sum + (group.members?.length || 0), 0),
-    [groups]
+  const totalMembers = groups.reduce((acc, g) => acc + (g.members?.length || 0), 0);
+
+  const renderRoom = ({ item }) => (
+    <TouchableOpacity
+      style={styles.roomCard}
+      onPress={() => navigation.navigate('GroupChat', { groupId: item.id, groupName: item.name })}
+    >
+      <View style={styles.roomIconWrap}>
+        <LinearGradient colors={[COLORS.accent, COLORS.purple]} style={StyleSheet.absoluteFill} />
+        <Users color={COLORS.white} size={24} />
+      </View>
+      <View style={styles.roomBody}>
+        <Text style={styles.roomName}>{item.name}</Text>
+        <Text style={styles.roomMeta}>{item.members.length} members</Text>
+        {item.lastMessage ? (
+          <Text style={styles.roomPreview} numberOfLines={1}>
+            {item.lastMessage}
+          </Text>
+        ) : (
+          <Text style={styles.roomPreviewEmpty}>No messages yet. Tap to open.</Text>
+        )}
+      </View>
+      <ChevronRight color={COLORS.textMuted} size={20} />
+    </TouchableOpacity>
   );
 
   return (
-    <LinearGradient colors={['#08090D', '#111318', '#1B1117']} style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <LinearGradient colors={['#FFFFFF', '#F5F7FF']} style={StyleSheet.absoluteFill} />
+
       <View style={styles.header}>
-        <Text style={styles.kicker}>your convos</Text>
-        <Text style={styles.title}>chat rooms</Text>
-        <Text style={styles.subtitle}>
-          Realtime group conversations, seeded demo messages and quick room handoffs from the map.
-        </Text>
+        <View>
+          <Text style={styles.headerKicker}>location chat</Text>
+          <Text style={styles.headerTitle}>Messages</Text>
+          <Text style={styles.headerSubtitle}>Live group rooms for friends and meetups.</Text>
+        </View>
+        <View style={styles.headerActions}>
+          <TouchableOpacity style={styles.secondaryBtn} onPress={() => navigation.navigate('GiftCenter')}>
+            <Gift color={COLORS.textPrimary} size={20} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.createBtn} onPress={() => navigation.navigate('CreateGroup')}>
+            <Plus color={COLORS.white} size={24} />
+          </TouchableOpacity>
+        </View>
       </View>
 
-      <View style={styles.statRow}>
+      <View style={styles.statsBar}>
         <View style={styles.statCard}>
-          <Text style={styles.statValue}>{groups.length}</Text>
-          <Text style={styles.statLabel}>rooms</Text>
+          <Text style={[styles.statValue, { color: COLORS.accent }]}>{groups.length}</Text>
+          <Text style={styles.statLabel}>groups</Text>
         </View>
         <View style={styles.statCard}>
-          <Text style={styles.statValue}>{totalMembers}</Text>
+          <Text style={[styles.statValue, { color: COLORS.green }]}>{totalMembers}</Text>
           <Text style={styles.statLabel}>members</Text>
         </View>
         <View style={styles.statCard}>
-          <Text style={styles.statValue}>live</Text>
+          <Text style={[styles.statValue, { color: COLORS.pink }]}>Live</Text>
           <Text style={styles.statLabel}>sync</Text>
         </View>
       </View>
 
-      <View style={styles.heroCard}>
-        <Sparkles color="#FACC15" size={18} />
-        <Text style={styles.heroText}>
-          Open a room to see seeded demo messages first, then send your own live updates.
-        </Text>
-      </View>
-
-      {loading ? (
-        <ActivityIndicator color="#FFFFFF" style={{ marginTop: 28 }} />
-      ) : (
-        <FlatList
-          data={groups}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.list}
-          renderItem={({ item, index }) => (
-            <TouchableOpacity
-              style={styles.roomCard}
-              activeOpacity={0.86}
-              onPress={() =>
-                navigation.navigate('GroupChat', {
-                  groupId: item.id,
-                  groupName: item.name,
-                })
-              }
-            >
-              <View style={[styles.roomBadge, { backgroundColor: getAccent(index) }]}>
-                <Users color="#111111" size={18} />
+      <FlatList
+        data={groups}
+        keyExtractor={(item) => item.id}
+        renderItem={renderRoom}
+        contentContainerStyle={styles.list}
+        showsVerticalScrollIndicator={false}
+        ListEmptyComponent={
+          !loading ? (
+            <View style={styles.emptyWrap}>
+              <View style={styles.emptyIcon}>
+                <MessageCircle color={COLORS.textMuted} size={64} />
               </View>
-              <View style={styles.roomBody}>
-                <Text style={styles.roomName}>{item.name}</Text>
-                <Text style={styles.roomMeta}>{item.members.length} people inside</Text>
-                <Text style={styles.roomPreview} numberOfLines={1}>
-                  {item.lastMessage || 'No message yet. Tap to open the room.'}
-                </Text>
-              </View>
-              <View style={styles.roomAction}>
-                <MessageCircle color="#FFFFFF" size={16} />
-              </View>
-            </TouchableOpacity>
-          )}
-          ListEmptyComponent={
-            <View style={styles.emptyCard}>
-              <Text style={styles.emptyTitle}>No rooms yet</Text>
+              <Text style={styles.emptyTitle}>No chats yet</Text>
               <Text style={styles.emptyText}>
-                Create a group or seed demo data from Friends to make this screen come alive.
+                Create a group to start chatting and sharing locations with your crew.
               </Text>
+              <TouchableOpacity style={styles.emptyAction} onPress={() => navigation.navigate('CreateGroup')}>
+                <Text style={styles.emptyActionText}>Create first group</Text>
+              </TouchableOpacity>
             </View>
-          }
-        />
-      )}
-    </LinearGradient>
+          ) : null
+        }
+        ListFooterComponent={loading ? <ActivityIndicator color={COLORS.accent} style={{ marginTop: 40 }} /> : <View style={{ height: 120 }} />}
+      />
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1, backgroundColor: COLORS.bg },
   header: {
-    paddingTop: 56,
-    paddingHorizontal: 18,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 24,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
   },
-  kicker: {
-    color: '#FFFFFF',
+  headerKicker: {
+    color: COLORS.accent,
     fontSize: 12,
-    fontWeight: '800',
-    textTransform: 'lowercase',
-  },
-  title: {
-    color: '#FFFFFF',
-    fontSize: 32,
     fontWeight: '900',
-    letterSpacing: -1.1,
-    textTransform: 'lowercase',
-    marginTop: 2,
+    letterSpacing: 1.8,
+    textTransform: 'uppercase',
   },
-  subtitle: {
-    color: '#A7AFBF',
+  headerTitle: {
+    color: COLORS.textPrimary,
+    fontSize: 34,
+    fontWeight: '900',
+    letterSpacing: -1.2,
+    marginTop: 4,
+  },
+  headerSubtitle: {
+    color: COLORS.textSecondary,
     fontSize: 13,
-    lineHeight: 19,
-    marginTop: 8,
-    maxWidth: 270,
+    marginTop: 6,
   },
-  statRow: {
+  createBtn: {
+    width: 52,
+    height: 52,
+    borderRadius: 22,
+    backgroundColor: COLORS.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...SHADOW.accent,
+  },
+  headerActions: {
     flexDirection: 'row',
     gap: 10,
-    paddingHorizontal: 18,
-    marginTop: 18,
+  },
+  secondaryBtn: {
+    width: 52,
+    height: 52,
+    borderRadius: 22,
+    backgroundColor: COLORS.bgElevated,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    ...SHADOW.card,
+  },
+  statsBar: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingHorizontal: 20,
+    marginBottom: 24,
   },
   statCard: {
     flex: 1,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  statValue: {
-    color: '#FFFFFF',
-    fontSize: 24,
-    fontWeight: '900',
-    textTransform: 'lowercase',
-  },
-  statLabel: {
-    color: '#939AA8',
-    fontSize: 12,
-    fontWeight: '700',
-    marginTop: 4,
-    textTransform: 'lowercase',
-  },
-  heroCard: {
-    marginHorizontal: 18,
-    marginTop: 16,
+    backgroundColor: COLORS.glass,
     borderRadius: 24,
-    backgroundColor: '#111111',
-    paddingHorizontal: 16,
-    paddingVertical: 15,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  heroText: {
-    flex: 1,
-    color: '#FFFFFF',
-    fontSize: 13,
-    lineHeight: 19,
-  },
-  list: {
-    paddingHorizontal: 18,
-    paddingTop: 18,
-    paddingBottom: 28,
-    gap: 12,
-  },
-  roomCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    borderRadius: 28,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    padding: 16,
-  },
-  roomBadge: {
-    width: 54,
-    height: 54,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  roomBody: {
-    flex: 1,
-  },
-  roomName: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '900',
-  },
-  roomMeta: {
-    color: '#FDE68A',
-    fontSize: 12,
-    fontWeight: '700',
-    marginTop: 4,
-  },
-  roomPreview: {
-    color: '#A7AFBF',
-    fontSize: 12,
-    marginTop: 6,
-  },
-  roomAction: {
-    width: 38,
-    height: 38,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyCard: {
-    borderRadius: 28,
-    backgroundColor: 'rgba(255,255,255,0.06)',
     padding: 18,
+    borderWidth: 1,
+    borderColor: COLORS.glassBorder,
+    alignItems: 'center',
+    ...SHADOW.card,
   },
-  emptyTitle: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '900',
+  statValue: { fontSize: 28, fontWeight: '900', letterSpacing: -1 },
+  statLabel: {
+    color: COLORS.textMuted,
+    fontSize: 11,
+    fontWeight: '800',
+    marginTop: 6,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
-  emptyText: {
-    color: '#A7AFBF',
-    fontSize: 13,
-    lineHeight: 20,
-    marginTop: 8,
+  list: { paddingHorizontal: 20, gap: 12 },
+  roomCard: {
+    backgroundColor: COLORS.bgElevated,
+    borderRadius: 28,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: 16,
+    ...SHADOW.card,
   },
+  roomIconWrap: {
+    width: 60,
+    height: 60,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  roomBody: { flex: 1, gap: 2 },
+  roomName: { color: COLORS.textPrimary, fontSize: 18, fontWeight: '800' },
+  roomMeta: { color: COLORS.accent, fontSize: 13, fontWeight: '700' },
+  roomPreview: { color: COLORS.textSecondary, fontSize: 14, marginTop: 4 },
+  roomPreviewEmpty: { color: COLORS.textMuted, fontSize: 13, fontStyle: 'italic', marginTop: 4 },
+  emptyWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 80,
+    paddingHorizontal: 40,
+  },
+  emptyIcon: { marginBottom: 20 },
+  emptyTitle: { color: COLORS.textPrimary, fontSize: 22, fontWeight: '900', marginBottom: 8 },
+  emptyText: { color: COLORS.textSecondary, textAlign: 'center', lineHeight: 22, marginBottom: 24 },
+  emptyAction: {
+    backgroundColor: COLORS.ink,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 18,
+  },
+  emptyActionText: { color: COLORS.white, fontWeight: '900', fontSize: 15 },
 });

@@ -151,6 +151,7 @@ class LocationService {
           null,
         batteryLevel: userSnapshot.data()?.batteryLevel ?? null,
         isGhostMode: Boolean(userSnapshot.data()?.isGhostMode),
+        privacyMap: userSnapshot.data()?.privacyMap || {},
       };
     }
 
@@ -253,6 +254,25 @@ class LocationService {
         updatedAt: now,
       };
 
+      const overrides = {};
+      Object.entries(currentUser.privacyMap || {}).forEach(([friendUid, setting]) => {
+        const mode = typeof setting === 'string' ? setting : setting?.mode;
+        if (mode === 'approximate') {
+          overrides[friendUid] = {
+            lat: coords.latitude + 0.003,
+            lon: coords.longitude + 0.003,
+            updatedAt: now
+          };
+        } else if (mode === 'freeze' && setting.lat) {
+          overrides[friendUid] = {
+            lat: setting.lat,
+            lon: setting.long || setting.lon,
+            updatedAt: setting.updatedAt || now
+          };
+        }
+      });
+      realtimePayload.overrides = overrides;
+
       await set(await this._getUserRef(), realtimePayload);
       this._lastPushedPayload = coords;
       this._lastPushAt = now;
@@ -335,17 +355,32 @@ class LocationService {
       const data = snapshot.val() || {};
       const myUid = auth.currentUser?.uid;
       const others = Object.entries(data).reduce((accumulator, [uid, payload]) => {
+        if (!payload) return accumulator;
+
+        let finalLat = payload.latitude;
+        let finalLon = payload.longitude;
+        let finalUpdatedAt = payload.updatedAt;
+
+        if (payload.overrides && payload.overrides[myUid]) {
+          finalLat = payload.overrides[myUid].lat;
+          finalLon = payload.overrides[myUid].lon;
+          finalUpdatedAt = payload.overrides[myUid].updatedAt || finalUpdatedAt;
+        }
+
         if (
           uid === myUid ||
-          !Number.isFinite(payload?.latitude) ||
-          !Number.isFinite(payload?.longitude)
+          !Number.isFinite(finalLat) ||
+          !Number.isFinite(finalLon)
         ) {
           return accumulator;
         }
 
         accumulator[uid] = {
           ...payload,
-          relativeTime: formatRelativeTime(payload.updatedAt),
+          latitude: finalLat,
+          longitude: finalLon,
+          updatedAt: finalUpdatedAt,
+          relativeTime: formatRelativeTime(finalUpdatedAt),
         };
         return accumulator;
       }, {});
@@ -466,12 +501,55 @@ class LocationService {
       (entry.data().members || []).forEach((memberId) => visibleIds.add(memberId));
     });
 
+    const currentUserSnap = await getDoc(doc(db, 'users', firebaseUser.uid));
+    const privacyMap = currentUserSnap.data()?.privacyMap || {};
+
     const writes = {};
     visibleIds.forEach((visibleUid) => {
+      const setting = privacyMap[visibleUid];
+      const mode = typeof setting === 'string' ? setting : setting?.mode;
+      if (mode === 'ghost') return; // Do not grant read access to Ghosted friends
       writes[visibleUid] = true;
     });
 
     await set(ref(rtdb, `location_visibility/${firebaseUser.uid}`), writes);
+  }
+
+  // --- Realtime Map Interactions (Emojis/Buzz) ---
+  async pushInteraction(targetUid, emoji) {
+    try {
+      const firebaseUser = auth.currentUser;
+      if (!firebaseUser) return;
+      
+      const interactionRef = ref(rtdb, `interactions/${targetUid}/${Date.now()}`);
+      await set(interactionRef, {
+        from: firebaseUser.uid,
+        emoji: emoji,
+        timestamp: Date.now()
+      });
+    } catch (e) {
+      console.warn('Cannot push interaction', e);
+    }
+  }
+
+  subscribeToInteractions(callback) {
+    const firebaseUser = auth.currentUser;
+    if (!firebaseUser) return () => {};
+
+    const interactionsRef = ref(rtdb, `interactions/${firebaseUser.uid}`);
+    
+    const handler = (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        // Pass interactions to caller
+        callback(Object.values(data));
+        // Clear them so they are ephemeral "burn after reading"
+        set(interactionsRef, null);
+      }
+    };
+
+    onValue(interactionsRef, handler);
+    return () => off(interactionsRef, 'value', handler);
   }
 }
 

@@ -6,62 +6,46 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import {
-  Check,
-  Database,
-  LogOut,
-  Plus,
-  Search,
-  UserPlus,
-  Users,
-  X,
-} from 'lucide-react-native';
-import { auth, db } from '../../../infrastructure/firebase/firebase';
+import { Check, Plus, UserPlus, Users, X, Zap } from 'lucide-react-native';
 import { collection, doc, getDoc, onSnapshot, query, where } from 'firebase/firestore';
+import { auth, db } from '../../../infrastructure/firebase/firebase';
 import { friendService } from '../../../infrastructure/firebase/friendService';
 import { chatService } from '../../../infrastructure/firebase/chatService';
 import { seedDemoSocialData } from '../../../seedData';
+import { COLORS, SHADOW } from '../../theme';
 
-function getInitials(name = '?') {
-  return name
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? '')
-    .join('') || '?';
+function getAvatarUri(name) {
+  return `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'B')}&background=ffffff&color=2563eb&bold=true&size=256`;
 }
 
-function getAvatarSource(user) {
-  const uri =
-    user?.avatarUrl ||
-    `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || 'Friend')}&background=111827&color=FFFFFF&size=256`;
-  return { uri };
-}
-
-function StatCard({ value, label }) {
+function StatCard({ value, label, accent = COLORS.accent }) {
   return (
     <View style={styles.statCard}>
-      <Text style={styles.statValue}>{value}</Text>
+      <Text style={[styles.statValue, { color: accent }]}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
     </View>
   );
 }
 
-function PersonRow({ user, rightNode, subtitle, accent = '#22C55E' }) {
+function FriendRow({ user, rightNode }) {
   return (
-    <View style={styles.personRow}>
+    <View style={styles.friendRow}>
       <View style={styles.avatarWrap}>
-        <Image source={getAvatarSource(user)} style={styles.avatarImage} />
-        <View style={[styles.avatarStatus, { backgroundColor: accent }]} />
+        <Image source={{ uri: getAvatarUri(user?.name) }} style={styles.avatar} />
+        <View style={[styles.dot, { backgroundColor: user?.isGhostMode ? COLORS.offline : COLORS.online }]} />
       </View>
-      <View style={styles.personBody}>
-        <Text style={styles.personName}>{user?.name}</Text>
-        <Text style={styles.personMeta}>{subtitle}</Text>
+      <View style={styles.friendInfo}>
+        <Text style={styles.friendName}>{user?.name || 'Friend'}</Text>
+        <Text style={styles.friendSub}>
+          {user?.isGhostMode
+            ? 'Ghost mode enabled'
+            : `@${user?.username || user?.email?.split('@')[0] || 'friend'}`}
+        </Text>
       </View>
       {rightNode}
     </View>
@@ -69,125 +53,66 @@ function PersonRow({ user, rightNode, subtitle, accent = '#22C55E' }) {
 }
 
 export default function FriendsListScreen({ navigation }) {
-  const [searchEmail, setSearchEmail] = useState('');
-  const [foundUser, setFoundUser] = useState(null);
   const [friends, setFriends] = useState([]);
   const [groups, setGroups] = useState([]);
   const [pendingRequests, setPendingRequests] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [searching, setSearching] = useState(false);
   const [seeding, setSeeding] = useState(false);
 
   useEffect(() => {
     const currentUid = auth.currentUser?.uid;
-    if (!currentUid) {
-      return undefined;
-    }
+    if (!currentUid) return undefined;
 
     const qFriends = query(collection(db, 'friendships'), where('status', '==', 'accepted'));
 
-    const unsubscribeFriends = onSnapshot(qFriends, async (snapshot) => {
+    const unsubFriends = onSnapshot(qFriends, async (snapshot) => {
       try {
-        const friendList = [];
-
-        for (const documentSnapshot of snapshot.docs) {
-          const friendship = documentSnapshot.data();
-          const friendUid =
-            friendship.userId1 === currentUid
-              ? friendship.userId2
-              : friendship.userId2 === currentUid
-                ? friendship.userId1
-                : null;
-
-          if (!friendUid) {
-            continue;
-          }
-
-          const userSnapshot = await getDoc(doc(db, 'users', friendUid));
-          if (userSnapshot.exists()) {
-            friendList.push({
-              id: documentSnapshot.id,
-              uid: friendUid,
-              ...userSnapshot.data(),
-            });
-          }
+        const list = [];
+        for (const snap of snapshot.docs) {
+          const f = snap.data();
+          const fUid = f.userId1 === currentUid ? f.userId2 : f.userId2 === currentUid ? f.userId1 : null;
+          if (!fUid) continue;
+          const uSnap = await getDoc(doc(db, 'users', fUid));
+          if (uSnap.exists()) list.push({ id: snap.id, uid: fUid, ...uSnap.data() });
         }
-
-        setFriends(friendList);
-      } catch (error) {
-        console.error('Error fetching friends:', error);
+        setFriends(list);
+      } catch (e) {
+        console.error(e);
       } finally {
         setLoading(false);
       }
     });
 
-    const unsubscribeGroups = chatService.subscribeToUserGroups(currentUid, setGroups);
-    const unsubscribeRequests = friendService.subscribeToPendingRequests(currentUid, setPendingRequests);
+    const unsubGroups = chatService.subscribeToUserGroups(currentUid, setGroups);
+    const unsubRequests = friendService.subscribeToPendingRequests(currentUid, setPendingRequests);
 
     return () => {
-      unsubscribeFriends();
-      unsubscribeGroups();
-      unsubscribeRequests();
+      unsubFriends();
+      unsubGroups();
+      unsubRequests();
     };
   }, []);
 
-  const onlineFriends = useMemo(
-    () => friends.filter((friend) => !friend.isGhostMode).length,
-    [friends]
-  );
+  const onlineFriends = useMemo(() => friends.filter((f) => !f.isGhostMode).length, [friends]);
 
-  const handleSearch = async () => {
-    if (!searchEmail.trim()) {
-      return;
-    }
-
-    setSearching(true);
+  const handleAccept = async (id) => {
     try {
-      const user = await friendService.searchUserByEmail(searchEmail);
-      if (!user) {
-        Alert.alert('Not found', 'No user matches that email yet.');
-        setFoundUser(null);
-        return;
-      }
-
-      setFoundUser(user);
-    } catch (error) {
-      Alert.alert('Error', 'Search failed. Please try again.');
-    } finally {
-      setSearching(false);
+      await friendService.acceptFriendRequest(id);
+    } catch {
+      Alert.alert('Error', 'Could not accept request.');
     }
   };
 
-  const handleAddFriend = async (targetUserId) => {
+  const handleDecline = async (id) => {
     try {
-      await friendService.addFriend(auth.currentUser.uid, targetUserId);
-      Alert.alert('Sent', 'Friend request was sent.');
-      setFoundUser(null);
-      setSearchEmail('');
-    } catch (error) {
-      Alert.alert('Error', error.message);
-    }
-  };
-
-  const handleAcceptRequest = async (friendshipId) => {
-    try {
-      await friendService.acceptFriendRequest(friendshipId);
-      Alert.alert('Accepted', 'You are friends now.');
-    } catch (error) {
-      Alert.alert('Error', 'Could not accept the request.');
-    }
-  };
-
-  const handleDeclineRequest = async (friendshipId) => {
-    try {
-      await friendService.declineFriendRequest(friendshipId);
-    } catch (error) {
-      Alert.alert('Error', 'Could not decline the request.');
+      await friendService.declineFriendRequest(id);
+    } catch {
+      Alert.alert('Error', 'Could not decline request.');
     }
   };
 
   const handleLeaveGroup = (groupId) => {
-    Alert.alert('Leave group', 'Do you want to leave this group?', [
+    Alert.alert('Leave group', 'Are you sure you want to leave this group?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Leave',
@@ -195,7 +120,7 @@ export default function FriendsListScreen({ navigation }) {
         onPress: async () => {
           try {
             await chatService.leaveGroup(groupId, auth.currentUser.uid);
-          } catch (error) {
+          } catch {
             Alert.alert('Error', 'Could not leave this group.');
           }
         },
@@ -209,106 +134,78 @@ export default function FriendsListScreen({ navigation }) {
       const result = await seedDemoSocialData();
       Alert.alert(
         'Demo ready',
-        `Created ${result.createdUsers.length} mock profiles and ${result.createdGroups.length} groups.`
+        `Created ${result.createdUsers.length} demo friends and ${result.createdGroups.length} groups.`
       );
-    } catch (error) {
-      Alert.alert('Seed failed', error.message || 'Could not create demo data.');
+    } catch (e) {
+      Alert.alert('Error', e.message || 'Could not seed demo data.');
     } finally {
       setSeeding(false);
     }
   };
 
   return (
-    <LinearGradient colors={['#F7E8D8', '#F5E5D6', '#ECD3BE']} style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.kicker}>your friends</Text>
-            <Text style={styles.title}>people nearby</Text>
-            <Text style={styles.subtitle}>Search, seed demo data, manage groups and keep your social graph ready for the map.</Text>
-          </View>
-          <TouchableOpacity style={styles.createGroupBtn} onPress={() => navigation.navigate('CreateGroup')}>
-            <Plus color="#FFFFFF" size={18} />
-          </TouchableOpacity>
-        </View>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <LinearGradient colors={['#FFFFFF', '#F4F7FF']} style={StyleSheet.absoluteFill} />
 
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.headerKicker}>social layer</Text>
+          <Text style={styles.headerTitle}>Friends</Text>
+          <Text style={styles.headerSubtitle}>Build the circles that appear on your map.</Text>
+        </View>
+        <TouchableOpacity style={styles.addBtn} onPress={() => navigation.navigate('AddFriend')}>
+          <UserPlus color={COLORS.white} size={22} />
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
         <View style={styles.statsRow}>
           <StatCard value={friends.length} label="friends" />
-          <StatCard value={onlineFriends} label="online" />
-          <StatCard value={groups.length} label="groups" />
+          <StatCard value={onlineFriends} label="visible now" accent={COLORS.green} />
+          <StatCard value={groups.length} label="groups" accent={COLORS.purple} />
         </View>
 
-        <View style={styles.seedCard}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.seedTitle}>Load demo people and map trails</Text>
-            <Text style={styles.seedText}>This fills friends, groups, realtime locations, chat messages and footprints so the whole app feels alive.</Text>
-          </View>
-          <TouchableOpacity style={styles.seedButton} onPress={handleSeedDemo} disabled={seeding}>
-            {seeding ? <ActivityIndicator color="#111111" /> : <Database color="#111111" size={16} />}
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.searchCard}>
-          <Search color="#111111" size={18} />
-          <TextInput
-            placeholder="Search by email"
-            placeholderTextColor="#6B7280"
-            style={styles.searchInput}
-            value={searchEmail}
-            onChangeText={setSearchEmail}
-            autoCapitalize="none"
-            onSubmitEditing={handleSearch}
-          />
-          <TouchableOpacity style={styles.searchButton} onPress={handleSearch} disabled={searching}>
-            {searching ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Text style={styles.searchButtonText}>Go</Text>}
-          </TouchableOpacity>
-        </View>
-
-        {foundUser && (
-          <View style={styles.block}>
-            <Text style={styles.blockTitle}>Search result</Text>
-            <View style={styles.sheetCard}>
-              <PersonRow
-                user={foundUser}
-                subtitle={foundUser.email}
-                rightNode={
-                  <View style={styles.actionRow}>
-                    <TouchableOpacity style={styles.blueButton} onPress={() => handleAddFriend(foundUser.id)}>
-                      <UserPlus color="#FFFFFF" size={16} />
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.ghostButton} onPress={() => setFoundUser(null)}>
-                      <X color="#111111" size={16} />
-                    </TouchableOpacity>
-                  </View>
-                }
-              />
+        <View style={styles.actionRow}>
+          <TouchableOpacity style={styles.actionCard} onPress={() => navigation.navigate('CreateGroup')}>
+            <View style={[styles.actionIcon, { backgroundColor: COLORS.accentDim }]}>
+              <Plus color={COLORS.accent} size={20} />
             </View>
-          </View>
-        )}
+            <View style={styles.actionBody}>
+              <Text style={styles.actionLabel}>Create group</Text>
+              <Text style={styles.actionHint}>Start a location room for friends.</Text>
+            </View>
+          </TouchableOpacity>
 
-        {pendingRequests.length > 0 && (
-          <View style={styles.block}>
-            <Text style={styles.blockTitle}>Pending requests</Text>
-            <View style={styles.sheetCard}>
-              {pendingRequests.map((request) => (
-                <PersonRow
-                  key={request.friendshipId}
-                  user={request.sender}
-                  subtitle="wants to add you"
-                  accent="#F59E0B"
+          <TouchableOpacity style={styles.actionCard} onPress={handleSeedDemo} disabled={seeding}>
+            <View style={[styles.actionIcon, { backgroundColor: 'rgba(245,183,0,0.14)' }]}>
+              {seeding ? (
+                <ActivityIndicator size="small" color={COLORS.yellow} />
+              ) : (
+                <Zap color={COLORS.yellow} size={20} />
+              )}
+            </View>
+            <View style={styles.actionBody}>
+              <Text style={styles.actionLabel}>Seed demo</Text>
+              <Text style={styles.actionHint}>Fill the app with sample users.</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+
+        {pendingRequests.length > 0 ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Friend requests</Text>
+            <View style={styles.card}>
+              {pendingRequests.map((req) => (
+                <FriendRow
+                  key={req.friendshipId}
+                  user={req.sender}
                   rightNode={
-                    <View style={styles.actionRow}>
-                      <TouchableOpacity
-                        style={styles.greenButton}
-                        onPress={() => handleAcceptRequest(request.friendshipId)}
-                      >
-                        <Check color="#FFFFFF" size={16} />
+                    <View style={styles.btnGroup}>
+                      <TouchableOpacity style={styles.btnAccept} onPress={() => handleAccept(req.friendshipId)}>
+                        <Check color={COLORS.white} size={16} />
                       </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.redButton}
-                        onPress={() => handleDeclineRequest(request.friendshipId)}
-                      >
-                        <X color="#FFFFFF" size={16} />
+                      <TouchableOpacity style={styles.btnDecline} onPress={() => handleDecline(req.friendshipId)}>
+                        <X color={COLORS.textPrimary} size={16} />
                       </TouchableOpacity>
                     </View>
                   }
@@ -316,340 +213,276 @@ export default function FriendsListScreen({ navigation }) {
               ))}
             </View>
           </View>
-        )}
+        ) : null}
 
-        <View style={styles.block}>
-          <View style={styles.blockHeader}>
-            <Text style={styles.blockTitle}>Your groups</Text>
-            <Text style={styles.blockMeta}>{groups.length}</Text>
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Groups</Text>
+            <Text style={styles.sectionCount}>{groups.length}</Text>
           </View>
-          <View style={styles.sheetCard}>
+          <View style={styles.card}>
             {groups.length ? (
               groups.map((group) => (
                 <View key={group.id} style={styles.groupRow}>
                   <View style={styles.groupIcon}>
-                    <Users color="#111111" size={18} />
+                    <Users color={COLORS.accent} size={18} />
                   </View>
-                  <View style={styles.personBody}>
-                    <Text style={styles.personName}>{group.name}</Text>
-                    <Text style={styles.personMeta}>{group.members.length} members</Text>
+                  <View style={styles.friendInfo}>
+                    <Text style={styles.friendName}>{group.name}</Text>
+                    <Text style={styles.friendSub}>{group.members.length} members</Text>
                   </View>
-                  <TouchableOpacity style={styles.ghostButton} onPress={() => handleLeaveGroup(group.id)}>
-                    <LogOut color="#B91C1C" size={16} />
+                  <TouchableOpacity
+                    style={styles.groupChatBtn}
+                    onPress={() => navigation.navigate('GroupChat', { groupId: group.id, groupName: group.name })}
+                  >
+                    <Text style={styles.groupChatBtnText}>Open</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.leaveBtn} onPress={() => handleLeaveGroup(group.id)}>
+                    <Text style={styles.leaveText}>X</Text>
                   </TouchableOpacity>
                 </View>
               ))
             ) : (
-              <Text style={styles.emptyText}>No groups yet. Create one to test the shared location flow.</Text>
+              <Text style={styles.emptyText}>No groups yet. Tap "Create group" to get started.</Text>
             )}
           </View>
         </View>
 
-        <View style={styles.block}>
-          <View style={styles.blockHeader}>
-            <Text style={styles.blockTitle}>All friends</Text>
-            <Text style={styles.blockMeta}>{friends.length}</Text>
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>All friends</Text>
+            <Text style={styles.sectionCount}>{friends.length}</Text>
           </View>
-          <View style={styles.sheetCard}>
+          <View style={styles.card}>
             {loading ? (
-              <ActivityIndicator color="#111111" style={{ marginVertical: 24 }} />
+              <ActivityIndicator color={COLORS.accent} style={{ marginVertical: 24 }} />
             ) : friends.length ? (
               friends.map((friend) => (
-                <PersonRow
+                <FriendRow
                   key={friend.uid}
                   user={friend}
-                  subtitle={friend.email}
-                  accent={friend.isGhostMode ? '#9CA3AF' : '#22C55E'}
                   rightNode={
-                    <View style={[styles.statusPill, friend.isGhostMode && styles.statusPillGhost]}>
-                      <Text style={[styles.statusPillText, friend.isGhostMode && styles.statusPillTextGhost]}>
-                        {friend.isGhostMode ? 'ghost' : 'live'}
+                    <View style={[styles.pill, friend.isGhostMode && styles.pillGhost]}>
+                      <Text style={[styles.pillText, friend.isGhostMode && styles.pillTextGhost]}>
+                        {friend.isGhostMode ? 'Hidden' : 'Live'}
                       </Text>
                     </View>
                   }
                 />
               ))
             ) : (
-              <Text style={styles.emptyText}>No friends yet. Search someone or seed demo data to populate the app.</Text>
+              <Text style={styles.emptyText}>No friends yet. Tap the plus button to add someone.</Text>
             )}
           </View>
         </View>
+
+        <View style={{ height: 120 }} />
       </ScrollView>
-    </LinearGradient>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0F172A', // Deep slate background
-  },
-  content: {
-    paddingTop: 56,
-    paddingHorizontal: 18,
-    paddingBottom: 32,
-    gap: 16,
-  },
+  container: { flex: 1, backgroundColor: COLORS.bg },
+  scroll: { paddingHorizontal: 16, paddingBottom: 40 },
   header: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 24,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    gap: 12,
   },
-  kicker: {
-    color: '#94A3B8',
+  headerKicker: {
+    color: COLORS.accent,
     fontSize: 12,
-    fontWeight: '800',
-    textTransform: 'lowercase',
+    fontWeight: '900',
+    letterSpacing: 1.8,
+    textTransform: 'uppercase',
   },
-  title: {
-    color: '#F8FAFC',
-    fontSize: 32,
+  headerTitle: {
+    color: COLORS.textPrimary,
+    fontSize: 34,
     fontWeight: '900',
     letterSpacing: -1.2,
-    textTransform: 'lowercase',
-    marginTop: 2,
+    marginTop: 4,
   },
-  subtitle: {
-    color: '#64748B',
+  headerSubtitle: {
+    color: COLORS.textSecondary,
     fontSize: 13,
-    lineHeight: 19,
-    marginTop: 8,
-    maxWidth: 250,
+    marginTop: 6,
   },
-  createGroupBtn: {
+  addBtn: {
+    width: 52,
+    height: 52,
+    borderRadius: 22,
+    backgroundColor: COLORS.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...SHADOW.accent,
+  },
+  statsRow: { flexDirection: 'row', gap: 12, marginBottom: 20 },
+  statCard: {
+    flex: 1,
+    backgroundColor: COLORS.glass,
+    borderRadius: 24,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: COLORS.glassBorder,
+    alignItems: 'center',
+    ...SHADOW.card,
+  },
+  statValue: { fontSize: 28, fontWeight: '900', letterSpacing: -1 },
+  statLabel: {
+    color: COLORS.textMuted,
+    fontSize: 11,
+    fontWeight: '800',
+    marginTop: 6,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  actionRow: { gap: 12, marginBottom: 28 },
+  actionCard: {
+    backgroundColor: COLORS.bgElevated,
+    borderRadius: 26,
+    minHeight: 80,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    gap: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    ...SHADOW.card,
+  },
+  actionIcon: {
     width: 48,
     height: 48,
     borderRadius: 18,
-    backgroundColor: '#38BDF8',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#38BDF8',
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 5,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  statCard: {
-    flex: 1,
-    borderRadius: 22,
-    backgroundColor: 'rgba(30,41,59,0.7)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  statValue: {
-    color: '#38BDF8',
-    fontSize: 26,
-    fontWeight: '900',
-  },
-  statLabel: {
-    color: '#94A3B8',
-    fontSize: 12,
-    fontWeight: '700',
-    marginTop: 4,
-    textTransform: 'lowercase',
-  },
-  seedCard: {
-    borderRadius: 28,
-    backgroundColor: '#1E293B',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
-    padding: 18,
-    flexDirection: 'row',
-    gap: 14,
-    alignItems: 'center',
-  },
-  seedTitle: {
-    color: '#F8FAFC',
-    fontSize: 18,
-    fontWeight: '900',
-  },
-  seedText: {
-    color: '#94A3B8',
-    fontSize: 13,
-    lineHeight: 19,
-    marginTop: 6,
-  },
-  seedButton: {
-    width: 52,
-    height: 52,
-    borderRadius: 18,
-    backgroundColor: '#FACC15',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  searchCard: {
-    minHeight: 58,
-    borderRadius: 22,
-    backgroundColor: 'rgba(30,41,59,0.7)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
-    paddingHorizontal: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  searchInput: {
-    flex: 1,
-    color: '#F8FAFC',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  searchButton: {
-    backgroundColor: '#38BDF8',
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    minWidth: 48,
-    alignItems: 'center',
-  },
-  searchButtonText: {
-    color: '#0F172A',
-    fontSize: 12,
-    fontWeight: '900',
-  },
-  block: {
-    gap: 10,
-  },
-  blockHeader: {
+  actionBody: { flex: 1 },
+  actionLabel: { color: COLORS.textPrimary, fontSize: 15, fontWeight: '800' },
+  actionHint: { color: COLORS.textMuted, fontSize: 12, marginTop: 2 },
+  section: { marginBottom: 24 },
+  sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 14,
+    paddingHorizontal: 4,
   },
-  blockTitle: {
-    color: '#F8FAFC',
-    fontSize: 17,
-    fontWeight: '900',
-  },
-  blockMeta: {
-    color: '#64748B',
+  sectionTitle: {
+    color: COLORS.textMuted,
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    letterSpacing: 1.3,
   },
-  sheetCard: {
-    borderRadius: 28,
-    backgroundColor: 'rgba(30,41,59,0.5)',
+  sectionCount: { color: COLORS.accent, fontSize: 14, fontWeight: '900' },
+  card: {
+    backgroundColor: COLORS.bgElevated,
+    borderRadius: 30,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
-    padding: 14,
-    gap: 10,
+    borderColor: COLORS.border,
+    overflow: 'hidden',
+    padding: 6,
+    ...SHADOW.card,
   },
-  personRow: {
+  friendRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    gap: 14,
   },
   avatarWrap: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    position: 'relative',
-  },
-  avatarImage: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 27,
-    backgroundColor: '#334155',
-  },
-  avatarStatus: {
-    position: 'absolute',
-    right: 1,
-    bottom: 1,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+    width: 56,
+    height: 56,
+    borderRadius: 24,
     borderWidth: 2,
-    borderColor: '#0F172A',
+    borderColor: 'rgba(255,255,255,0.9)',
+    padding: 2,
+    backgroundColor: '#F3F4F6',
   },
-  personBody: {
-    flex: 1,
+  avatar: { width: '100%', height: '100%', borderRadius: 20, backgroundColor: COLORS.bgSoft },
+  dot: {
+    position: 'absolute',
+    right: -2,
+    bottom: -2,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 3,
+    borderColor: COLORS.white,
   },
-  personName: {
-    color: '#F8FAFC',
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  personMeta: {
-    color: '#94A3B8',
-    fontSize: 12,
-    marginTop: 4,
-  },
-  actionRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  blueButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 14,
-    backgroundColor: '#38BDF8',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  greenButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 14,
-    backgroundColor: '#10B981',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  redButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 14,
-    backgroundColor: '#EF4444',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  ghostButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 14,
-    backgroundColor: '#334155',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  friendInfo: { flex: 1 },
+  friendName: { color: COLORS.textPrimary, fontSize: 16, fontWeight: '800' },
+  friendSub: { color: COLORS.textSecondary, fontSize: 13, marginTop: 2 },
   groupRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    padding: 12,
+    gap: 14,
   },
   groupIcon: {
-    width: 54,
-    height: 54,
-    borderRadius: 20,
-    backgroundColor: '#38BDF8',
+    width: 52,
+    height: 52,
+    borderRadius: 22,
+    backgroundColor: COLORS.accentDim,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  statusPill: {
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: 'rgba(16,185,129,0.15)',
+  groupChatBtn: {
+    backgroundColor: COLORS.ink,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 14,
   },
-  statusPillGhost: {
-    backgroundColor: 'rgba(148,163,184,0.15)',
+  groupChatBtnText: { color: COLORS.white, fontSize: 13, fontWeight: '900' },
+  leaveBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 14,
+    backgroundColor: '#FEF2F2',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  statusPillText: {
-    color: '#34D399',
-    fontSize: 11,
-    fontWeight: '900',
-    textTransform: 'uppercase',
+  leaveText: { color: COLORS.danger, fontWeight: '900' },
+  btnGroup: { flexDirection: 'row', gap: 10 },
+  btnAccept: {
+    width: 42,
+    height: 42,
+    borderRadius: 16,
+    backgroundColor: COLORS.green,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  statusPillTextGhost: {
-    color: '#94A3B8',
+  btnDecline: {
+    width: 42,
+    height: 42,
+    borderRadius: 16,
+    backgroundColor: COLORS.bgInput,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
+  pill: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 14,
+    backgroundColor: 'rgba(34,197,94,0.12)',
+  },
+  pillGhost: { backgroundColor: COLORS.bgInput },
+  pillText: { color: COLORS.green, fontSize: 11, fontWeight: '900', textTransform: 'uppercase' },
+  pillTextGhost: { color: COLORS.textMuted },
   emptyText: {
-    color: '#64748B',
-    fontSize: 13,
-    lineHeight: 20,
+    color: COLORS.textMuted,
+    fontSize: 14,
+    padding: 32,
+    textAlign: 'center',
+    lineHeight: 22,
+    fontWeight: '500',
   },
 });

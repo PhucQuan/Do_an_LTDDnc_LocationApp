@@ -1,24 +1,25 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
-  Image,
-  Pressable,
+  Animated,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import MapView, {
-  AnimatedRegion,
-  Marker,
-  Polyline,
-  PROVIDER_DEFAULT,
-} from 'react-native-maps';
+import MapView, { AnimatedRegion, Marker, Polyline, PROVIDER_DEFAULT } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
-import { Camera, ImagePlus, MessageCircle, Settings2, Users } from 'lucide-react-native';
+import {
+  Camera,
+  Gift,
+  ImagePlus,
+  MessageCircle,
+  Navigation,
+  Settings2,
+} from 'lucide-react-native';
 import { auth, db } from '../../../infrastructure/firebase/firebase';
 import { useLocation } from '../../../core/hooks/useLocation';
 import { useVisibilityScope } from '../../../core/hooks/useVisibilityScope';
@@ -27,13 +28,9 @@ import { momentService } from '../../../infrastructure/firebase/momentService';
 import { SocialMapMarker } from '../../components/map/SocialMapMarker';
 import { SelectedUserSheet } from '../../components/map/SelectedUserSheet';
 import { MomentViewerModal } from '../../components/map/MomentViewerModal';
+import { COLORS, SHADOW } from '../../theme';
 
-const FILTERS = [
-  { key: 'today', label: 'NOW' },
-  { key: 'yesterday', label: 'BEFORE' },
-];
-
-const PATH_COLORS = ['#1D4ED8', '#F472B6', '#22C55E', '#F59E0B', '#A78BFA'];
+const PATH_COLORS = [COLORS.accent, COLORS.pink, COLORS.purple, COLORS.green, COLORS.yellow];
 
 function buildAnimatedRegion(coords) {
   return new AnimatedRegion({
@@ -42,22 +39,6 @@ function buildAnimatedRegion(coords) {
     latitudeDelta: 0.012,
     longitudeDelta: 0.012,
   });
-}
-
-function formatStatus(status = 'dung yen') {
-  if (status === 'dang chay') {
-    return 'running';
-  }
-  if (status === 'dang di chuyen') {
-    return 'moving';
-  }
-  return 'still';
-}
-
-function getFallbackAvatar(name) {
-  return `https://ui-avatars.com/api/?name=${encodeURIComponent(
-    name || 'You'
-  )}&background=111827&color=FFFFFF&size=256`;
 }
 
 function getMomentCoordinates(moment) {
@@ -76,7 +57,7 @@ export default function MapScreen({ navigation }) {
   const visibleUserIds = useVisibilityScope();
   const mapRef = useRef(null);
   const animatedMarkersRef = useRef({});
-  const fitTimeoutRef = useRef(null);
+  const interactionAnim = useRef(new Animated.Value(0)).current;
 
   const [otherUsers, setOtherUsers] = useState({});
   const [currentProfile, setCurrentProfile] = useState(null);
@@ -89,9 +70,11 @@ export default function MapScreen({ navigation }) {
   const [moments, setMoments] = useState([]);
   const [selectedMoment, setSelectedMoment] = useState(null);
   const [followCurrentUser, setFollowCurrentUser] = useState(true);
+  const [incomingInteraction, setIncomingInteraction] = useState(null);
+  const [showMyCard, setShowMyCard] = useState(false);
+  const [selectedFriendUid, setSelectedFriendUid] = useState(null);
 
   const coords = location?.coords ?? null;
-  const currentUid = auth.currentUser?.uid;
   const currentName =
     currentProfile?.name ||
     auth.currentUser?.displayName ||
@@ -102,9 +85,7 @@ export default function MapScreen({ navigation }) {
   useEffect(() => {
     const loadProfile = async () => {
       const uid = auth.currentUser?.uid;
-      if (!uid) {
-        return;
-      }
+      if (!uid) return;
 
       const userSnapshot = await getDoc(doc(db, 'users', uid));
       if (userSnapshot.exists()) {
@@ -128,9 +109,7 @@ export default function MapScreen({ navigation }) {
   }, []);
 
   useEffect(() => {
-    if (!coords) {
-      return;
-    }
+    if (!coords) return;
 
     import('expo-location')
       .then(({ reverseGeocodeAsync }) =>
@@ -140,8 +119,8 @@ export default function MapScreen({ navigation }) {
         })
       )
       .then((results) => {
-        if (results?.[0]) {
-          const place = results[0];
+        const place = results?.[0];
+        if (place) {
           setCityName(place.city || place.district || place.region || 'Your city');
         }
       })
@@ -149,12 +128,9 @@ export default function MapScreen({ navigation }) {
   }, [coords?.latitude, coords?.longitude]);
 
   useEffect(() => {
-    if (!coords) {
-      return;
-    }
-
+    if (!coords) return;
     locationService.pushLocation(location);
-  }, [location, coords?.latitude, coords?.longitude]);
+  }, [coords?.latitude, coords?.longitude, location]);
 
   useEffect(() => {
     const unsubscribe = locationService.subscribeToAllLocations((payload) => {
@@ -166,9 +142,7 @@ export default function MapScreen({ navigation }) {
             return;
           }
 
-          nextUsers[uid] = previous[uid]
-            ? { ...previous[uid], ...user }
-            : user;
+          nextUsers[uid] = previous[uid] ? { ...previous[uid], ...user } : user;
 
           const nextCoordinate = {
             latitude: user.latitude,
@@ -221,39 +195,26 @@ export default function MapScreen({ navigation }) {
           latitude: coords.latitude,
           longitude: coords.longitude,
         },
-        zoom: 16.2,
+        zoom: 16.1,
       },
-      { duration: 900 }
+      { duration: 800 }
     );
   }, [coords?.latitude, coords?.longitude, followCurrentUser]);
 
   useEffect(() => {
-    if (!mapRef.current || !coords) {
-      return;
-    }
-
-    const coordinates = [
-      { latitude: coords.latitude, longitude: coords.longitude },
-      ...Object.values(otherUsers).map((user) => ({
-        latitude: user.latitude,
-        longitude: user.longitude,
-      })),
-    ];
-
-    if (coordinates.length < 2) {
-      return;
-    }
-
-    clearTimeout(fitTimeoutRef.current);
-    fitTimeoutRef.current = setTimeout(() => {
-      mapRef.current?.fitToCoordinates(coordinates, {
-        edgePadding: { top: 180, right: 72, bottom: 250, left: 72 },
-        animated: true,
-      });
-    }, 600);
-
-    return () => clearTimeout(fitTimeoutRef.current);
-  }, [coords?.latitude, coords?.longitude, Object.keys(otherUsers).join('|')]);
+    const unsubscribe = locationService.subscribeToInteractions((interactions) => {
+      if (!interactions?.length) return;
+      const latest = interactions[interactions.length - 1];
+      setIncomingInteraction(latest);
+      interactionAnim.setValue(0);
+      Animated.sequence([
+        Animated.spring(interactionAnim, { toValue: 1, useNativeDriver: true, tension: 80 }),
+        Animated.delay(1600),
+        Animated.timing(interactionAnim, { toValue: 0, duration: 350, useNativeDriver: true }),
+      ]).start(() => setIncomingInteraction(null));
+    });
+    return () => unsubscribe();
+  }, [interactionAnim]);
 
   useEffect(() => {
     return () => {
@@ -269,40 +230,43 @@ export default function MapScreen({ navigation }) {
 
   const focusFriend = (uid, user) => {
     setFollowCurrentUser(false);
-    setSelectedUser({
-      uid,
-      ...user,
-      statusLabel: formatStatus(user.status),
-    });
+    setSelectedFriendUid(uid);
+    setSelectedUser({ uid, ...user });
+    setShowMyCard(false);
 
     mapRef.current?.animateCamera(
       {
         center: {
-          latitude: user.latitude,
+          latitude: user.latitude - 0.00055,
           longitude: user.longitude,
         },
-        zoom: 16.4,
+        zoom: 17.1,
+        pitch: 18,
+        heading: 0,
+        altitude: 420,
       },
-      { duration: 700 }
+      { duration: 950 }
     );
   };
 
   const centerOnMe = () => {
-    if (!coords || !mapRef.current) {
-      return;
-    }
-
+    if (!coords || !mapRef.current) return;
     setFollowCurrentUser(true);
     setSelectedUser(null);
+    setSelectedFriendUid(null);
+    setShowMyCard(true);
     mapRef.current.animateCamera(
       {
         center: {
-          latitude: coords.latitude,
+          latitude: coords.latitude - 0.00045,
           longitude: coords.longitude,
         },
-        zoom: 16.5,
+        zoom: 16.8,
+        pitch: 12,
+        heading: 0,
+        altitude: 460,
       },
-      { duration: 700 }
+      { duration: 900 }
     );
   };
 
@@ -310,20 +274,14 @@ export default function MapScreen({ navigation }) {
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (permission.status !== 'granted') {
-        Alert.alert('Permission needed', 'Please allow photo access to share moments.');
+        Alert.alert('Permission needed', 'Please allow photo access to share a live moment.');
         return;
       }
 
       const result =
         mode === 'camera'
-          ? await ImagePicker.launchCameraAsync({
-              mediaTypes: ['images'],
-              quality: 0.8,
-            })
-          : await ImagePicker.launchImageLibraryAsync({
-              mediaTypes: ['images'],
-              quality: 0.8,
-            });
+          ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.8 })
+          : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 });
 
       if (result.canceled || !result.assets?.[0]?.uri || !coords) {
         return;
@@ -334,14 +292,14 @@ export default function MapScreen({ navigation }) {
         location,
       });
 
-      Alert.alert('Moment shared', 'Your new moment is now visible on the map.');
+      Alert.alert('Shared', 'Your moment is now visible on the map.');
     } catch (error) {
       Alert.alert('Upload failed', error.message || 'Could not share this moment.');
     }
   };
 
   const openMomentPicker = () => {
-    Alert.alert('Share a moment', 'Choose how you want to add a map moment.', [
+    Alert.alert('Share a moment', 'Choose how you want to post it.', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Camera', onPress: () => handleShareMoment('camera') },
       { text: 'Library', onPress: () => handleShareMoment('library') },
@@ -351,8 +309,13 @@ export default function MapScreen({ navigation }) {
   if (isLoading || !coords) {
     return (
       <View style={styles.loadingScreen}>
+        <View style={styles.loadingIconWrap}>
+          <Navigation color={COLORS.accent} size={32} />
+        </View>
         <Text style={styles.loadingTitle}>Finding your live location...</Text>
-        {!!errorMsg && <Text style={styles.loadingHint}>{errorMsg}</Text>}
+        <Text style={styles.loadingHint}>
+          {errorMsg || 'Turn on GPS and grant location permission so the map can update.'}
+        </Text>
       </View>
     );
   }
@@ -372,35 +335,48 @@ export default function MapScreen({ navigation }) {
         showsUserLocation={false}
         showsCompass={false}
         showsMyLocationButton={false}
-        onPress={() => setSelectedUser(null)}
+        onPress={() => {
+          setSelectedUser(null);
+          setShowMyCard(false);
+          setSelectedFriendUid(null);
+        }}
       >
         <Marker
           coordinate={{ latitude: coords.latitude, longitude: coords.longitude }}
           anchor={{ x: 0.5, y: 0.5 }}
           tracksViewChanges={false}
           zIndex={1000}
+          onPress={() => {
+            setSelectedUser(null);
+            setShowMyCard((current) => !current);
+            setSelectedFriendUid(null);
+            setFollowCurrentUser(true);
+          }}
         >
           <SocialMapMarker
             name={currentName}
             avatarUrl={currentAvatar}
             speedKmh={location?.meta?.speedKmh}
+            batteryLevel={location?.meta?.batteryLevel}
             lastUpdatedAt={Date.now()}
-            bubbleAccent={['#60A5FA', '#C084FC', '#F9A8D4']}
+            bubbleAccent={[COLORS.me, COLORS.accent, COLORS.purple]}
             showSpeed
+            isMe
           />
         </Marker>
 
-        {showFootprints &&
-          footprints.map((path, index) => (
-            <Polyline
-              key={`${path.uid}-${historyFilter}`}
-              coordinates={path.coordinates}
-              strokeColor={PATH_COLORS[index % PATH_COLORS.length]}
-              strokeWidth={4}
-              lineCap="round"
-              lineJoin="round"
-            />
-          ))}
+        {showFootprints
+          ? footprints.map((path, index) => (
+              <Polyline
+                key={`${path.uid}-${historyFilter}`}
+                coordinates={path.coordinates}
+                strokeColor={PATH_COLORS[index % PATH_COLORS.length]}
+                strokeWidth={4}
+                lineCap="round"
+                lineJoin="round"
+              />
+            ))
+          : null}
 
         {onlineUsers.map(([uid, user]) => {
           const animatedCoordinate =
@@ -431,7 +407,8 @@ export default function MapScreen({ navigation }) {
                 stationarySince={user.stationarySince}
                 lastUpdatedAt={user.updatedAt}
                 isGhostMode={user.isGhostMode}
-                bubbleAccent={['#FDE68A', '#F9A8D4', '#C4B5FD']}
+                bubbleAccent={['#FDE68A', '#FDBA74', '#F9A8D4']}
+                isSelected={selectedFriendUid === uid}
               />
             </Marker.Animated>
           );
@@ -455,92 +432,137 @@ export default function MapScreen({ navigation }) {
         })}
       </MapView>
 
+      <LinearGradient
+        colors={['rgba(255,255,255,0.88)', 'rgba(255,255,255,0.15)', 'rgba(255,255,255,0)']}
+        style={styles.topGlow}
+        pointerEvents="none"
+      />
+
       <SafeAreaView edges={['top']} style={styles.header}>
-        <View>
+        <View style={styles.cityBlock}>
+          <Text style={styles.cityEyebrow}>friend map</Text>
           <Text style={styles.cityTitle}>{cityName}</Text>
-          <View style={styles.cityUnderline} />
+          <Text style={styles.citySubtitle}>Live circles, avatar pins and shared moments</Text>
         </View>
         <TouchableOpacity style={styles.settingsButton} onPress={() => navigation.navigate('Profile')}>
-          <Settings2 color="#111111" size={20} />
+          <Settings2 color={COLORS.textPrimary} size={20} />
         </TouchableOpacity>
       </SafeAreaView>
 
-      <View style={styles.topStats}>
-        <View style={styles.statCard}>
-          <Text style={styles.statValue}>{friendCount || onlineUsers.length}</Text>
-          <Text style={styles.statLabel}>friends</Text>
+      <View style={styles.editorialStrip}>
+        <View style={styles.editorialPill}>
+          <Text style={styles.editorialValue}>{friendCount || onlineUsers.length}</Text>
+          <Text style={styles.editorialLabel}>live friends</Text>
         </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statValue}>{visibleMoments.length}</Text>
-          <Text style={styles.statLabel}>moments</Text>
+        <View style={styles.editorialPill}>
+          <Text style={[styles.editorialValue, { color: COLORS.pink }]}>{visibleMoments.length}</Text>
+          <Text style={styles.editorialLabel}>moments</Text>
+        </View>
+        <View style={[styles.editorialPill, styles.editorialPillSoft]}>
+          <Text style={styles.editorialHint}>{selectedFriendUid ? 'friend focus' : followCurrentUser ? 'camera live' : 'map free'}</Text>
         </View>
       </View>
 
       <View style={styles.rightRail}>
-        <TouchableOpacity style={styles.railButton} onPress={() => navigation.navigate('Friends')}>
-          <Users color="#111111" size={18} />
+        <TouchableOpacity style={styles.railButton} onPress={() => navigation.navigate('GiftCenter')}>
+          <Gift color={COLORS.orange} size={22} />
         </TouchableOpacity>
         <TouchableOpacity style={styles.railButton} onPress={() => navigation.navigate('Chats')}>
-          <MessageCircle color="#111111" size={18} />
+          <MessageCircle color={COLORS.pink} size={22} />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.railButton} onPress={openMomentPicker}>
-          <ImagePlus color="#111111" size={18} />
+        <TouchableOpacity style={styles.railButton} onPress={() => handleShareMoment('library')}>
+          <ImagePlus color={COLORS.yellow} size={22} />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.railButton} onPress={() => setShowFootprints((current) => !current)}>
-          <Camera color="#111111" size={18} />
+        <TouchableOpacity style={[styles.railButton, styles.railButtonActive]} onPress={() => handleShareMoment('camera')}>
+          <Camera color={COLORS.white} size={22} />
         </TouchableOpacity>
       </View>
-
-      <LinearGradient
-        colors={['rgba(255,255,255,0.35)', 'rgba(255,255,255,0)']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.heroFog}
-        pointerEvents="none"
-      />
 
       <View style={styles.filterDock}>
-        {FILTERS.map((filter) => (
-          <TouchableOpacity
-            key={filter.key}
-            style={[styles.filterCard, historyFilter === filter.key && styles.filterCardActive]}
-            onPress={() => setHistoryFilter(filter.key)}
-          >
-            <Text style={[styles.filterTime, historyFilter === filter.key && styles.filterTextActive]}>
-              {filter.key === 'today' ? '17:16' : '20:05'}
-            </Text>
-            <Text style={[styles.filterLabel, historyFilter === filter.key && styles.filterTextActive]}>
-              {filter.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-        <TouchableOpacity style={styles.nowCard} onPress={centerOnMe}>
-          <Text style={styles.nowText}>{followCurrentUser ? 'LIVE' : 'FOLLOW'}</Text>
+        <TouchableOpacity
+          style={[styles.filterCard, showFootprints && styles.filterCardActive]}
+          onPress={() => setShowFootprints((current) => !current)}
+        >
+          <Text style={[styles.filterLabel, showFootprints && styles.filterLabelActive]}>
+            {showFootprints ? 'Trail on' : 'Trail off'}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.followCard,
+            followCurrentUser
+              ? { backgroundColor: COLORS.accent, borderColor: COLORS.accent }
+              : { backgroundColor: 'rgba(255,255,255,0.96)', borderColor: COLORS.border },
+          ]}
+          onPress={centerOnMe}
+        >
+          <Navigation color={followCurrentUser ? COLORS.white : COLORS.accent} size={18} />
+          <Text style={[styles.followText, followCurrentUser && { color: COLORS.white }]}>
+            {followCurrentUser ? 'Following you' : 'Center on me'}
+          </Text>
         </TouchableOpacity>
       </View>
 
-      <View style={styles.bottomDock}>
-        <TouchableOpacity style={styles.dockButton} onPress={() => navigation.navigate('Friends')}>
-          <Users color="#111111" size={19} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.dockButton} onPress={() => navigation.navigate('Chats')}>
-          <MessageCircle color="#111111" size={19} />
-        </TouchableOpacity>
-        <Pressable style={styles.meBubble} onPress={centerOnMe}>
-          <Image
-            source={{ uri: currentAvatar || getFallbackAvatar(currentName) }}
-            style={styles.meBubbleImage}
-          />
-        </Pressable>
-      </View>
+      {showMyCard ? (
+        <View style={styles.myCard}>
+          <Text style={styles.myCardKicker}>you are here</Text>
+          <Text style={styles.myCardTitle}>{currentName}</Text>
+          <View style={styles.myCardMetrics}>
+            <View style={styles.myMetric}>
+              <Text style={styles.myMetricValue}>{Math.max(Number(location?.meta?.speedKmh || 0), 0).toFixed(0)}</Text>
+              <Text style={styles.myMetricLabel}>km/h</Text>
+            </View>
+            <View style={styles.myMetric}>
+              <Text style={styles.myMetricValue}>{Math.max(Number(location?.meta?.batteryLevel || 0), 0).toFixed(0)}%</Text>
+              <Text style={styles.myMetricLabel}>battery</Text>
+            </View>
+            <View style={styles.myMetric}>
+              <Text style={styles.myMetricValue}>{followCurrentUser ? 'Live' : 'Free'}</Text>
+              <Text style={styles.myMetricLabel}>camera</Text>
+            </View>
+          </View>
+        </View>
+      ) : null}
 
       <SelectedUserSheet
         user={selectedUser}
-        onClose={() => setSelectedUser(null)}
+        onClose={() => {
+          setSelectedUser(null);
+          setSelectedFriendUid(null);
+        }}
         onChat={() => navigation.navigate('Chats')}
+        onInteract={(emoji) => {
+          if (selectedUser?.uid) {
+            locationService.pushInteraction(selectedUser.uid, emoji);
+          }
+        }}
       />
 
       <MomentViewerModal moment={selectedMoment} onClose={() => setSelectedMoment(null)} />
+
+      {incomingInteraction ? (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.interactionOverlay,
+            {
+              opacity: interactionAnim,
+              transform: [
+                {
+                  scale: interactionAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.6, 1],
+                  }),
+                },
+              ],
+            },
+          ]}
+        >
+          <Text style={styles.interactionEmoji}>{incomingInteraction.emoji}</Text>
+          <Text style={styles.interactionLabel}>A friend reacted to you</Text>
+        </Animated.View>
+      ) : null}
     </View>
   );
 }
@@ -548,26 +570,43 @@ export default function MapScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0F172A',
+    backgroundColor: COLORS.bg,
   },
   loadingScreen: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#0F172A',
+    backgroundColor: COLORS.bg,
     paddingHorizontal: 24,
   },
+  loadingIconWrap: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: COLORS.accentDim,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
   loadingTitle: {
-    color: '#F8FAFC',
+    color: COLORS.textPrimary,
     fontSize: 20,
     fontWeight: '900',
     textAlign: 'center',
   },
   loadingHint: {
-    color: '#94A3B8',
+    color: COLORS.textSecondary,
     fontSize: 13,
     marginTop: 10,
     textAlign: 'center',
+    lineHeight: 20,
+  },
+  topGlow: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 190,
   },
   header: {
     position: 'absolute',
@@ -578,78 +617,89 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    paddingHorizontal: 20,
-    paddingTop: 10,
+    paddingHorizontal: 18,
+    paddingTop: 8,
+  },
+  cityBlock: {
+    maxWidth: 250,
+  },
+  cityEyebrow: {
+    color: COLORS.accent,
+    fontSize: 11,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    letterSpacing: 1.5,
+    marginBottom: 4,
   },
   cityTitle: {
-    color: '#F8FAFC',
+    color: COLORS.textPrimary,
     fontSize: 34,
     fontWeight: '900',
-    letterSpacing: -1.2,
+    letterSpacing: -1.1,
     textTransform: 'capitalize',
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
   },
-  cityUnderline: {
-    width: 120,
-    height: 4,
-    borderRadius: 999,
-    backgroundColor: '#38BDF8',
+  citySubtitle: {
+    color: COLORS.textSecondary,
+    fontSize: 13,
+    lineHeight: 18,
     marginTop: 6,
-    shadowColor: '#38BDF8',
-    shadowOpacity: 0.5,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 0 },
   },
   settingsButton: {
-    width: 46,
-    height: 46,
-    borderRadius: 16,
-    backgroundColor: 'rgba(30,41,59,0.85)',
+    width: 52,
+    height: 52,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.92)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
+    borderColor: COLORS.border,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000000',
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 5,
+    ...SHADOW.card,
   },
   topStats: {
+  },
+  editorialStrip: {
     position: 'absolute',
-    top: 118,
-    left: 20,
+    top: 144,
+    left: 18,
+    right: 96,
     zIndex: 35,
+    flexDirection: 'row',
     gap: 10,
   },
-  statCard: {
-    width: 84,
-    borderRadius: 24,
-    backgroundColor: 'rgba(30,41,59,0.85)',
+  editorialPill: {
+    minHeight: 52,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.84)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
-    paddingVertical: 14,
-    paddingHorizontal: 12,
-    shadowColor: '#000000',
-    shadowOpacity: 0.25,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 7,
+    borderColor: 'rgba(255,255,255,0.6)',
+    paddingHorizontal: 14,
+    justifyContent: 'center',
+    ...SHADOW.card,
   },
-  statValue: {
-    color: '#38BDF8',
-    fontSize: 22,
+  editorialPillSoft: {
+    flex: 1,
+    backgroundColor: 'rgba(15,23,42,0.8)',
+    borderColor: 'rgba(15,23,42,0.06)',
+  },
+  editorialValue: {
+    color: COLORS.accent,
+    fontSize: 18,
     fontWeight: '900',
-    letterSpacing: -0.5,
+    letterSpacing: -0.4,
   },
-  statLabel: {
-    color: '#94A3B8',
-    fontSize: 11,
+  editorialLabel: {
+    color: COLORS.textMuted,
+    fontSize: 10,
     fontWeight: '800',
     textTransform: 'uppercase',
-    marginTop: 4,
+    marginTop: 2,
+  },
+  editorialHint: {
+    color: COLORS.white,
+    fontSize: 12,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
   },
   rightRail: {
     position: 'absolute',
@@ -659,155 +709,157 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   railButton: {
-    width: 46,
-    height: 46,
-    borderRadius: 16,
-    backgroundColor: 'rgba(30,41,59,0.85)',
+    width: 50,
+    height: 50,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.94)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
+    borderColor: COLORS.border,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000000',
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
+    ...SHADOW.card,
   },
-  heroFog: {
-    position: 'absolute',
-    top: 210,
-    left: 34,
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    zIndex: 5,
+  railButtonActive: {
+    backgroundColor: COLORS.purple,
   },
   filterDock: {
     position: 'absolute',
-    bottom: 128,
     left: 18,
     right: 18,
+    bottom: 110,
     zIndex: 35,
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'center',
     gap: 10,
   },
   filterCard: {
-    width: 82,
-    height: 88,
-    borderRadius: 22,
-    backgroundColor: 'rgba(30,41,59,0.85)',
+    paddingHorizontal: 14,
+    height: 44,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.92)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
-    paddingVertical: 12,
+    borderColor: COLORS.border,
     alignItems: 'center',
-    justifyContent: 'space-between',
-    shadowColor: '#000000',
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 8,
+    justifyContent: 'center',
   },
   filterCardActive: {
-    backgroundColor: '#38BDF8',
-    borderWidth: 0,
-  },
-  filterTime: {
-    color: '#94A3B8',
-    fontSize: 14,
-    fontWeight: '800',
+    backgroundColor: COLORS.ink,
   },
   filterLabel: {
-    color: '#F8FAFC',
+    color: COLORS.textPrimary,
     fontSize: 12,
     fontWeight: '800',
-    letterSpacing: 0.3,
   },
-  filterTextActive: {
-    color: '#0F172A',
+  filterLabelActive: {
+    color: COLORS.white,
   },
-  nowCard: {
-    width: 92,
-    height: 94,
-    borderRadius: 24,
-    backgroundColor: 'rgba(30,41,59,0.95)',
-    borderWidth: 1,
-    borderColor: 'rgba(56,189,248,0.3)',
-    alignItems: 'center',
-    justifyContent: 'center',
+  followCard: {
     marginLeft: 'auto',
-    shadowColor: '#000000',
-    shadowOpacity: 0.3,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    height: 48,
+    paddingHorizontal: 18,
+    borderRadius: 20,
+    borderWidth: 1,
+    ...SHADOW.accent,
   },
-  nowText: {
-    color: '#38BDF8',
+  followText: {
+    color: COLORS.textPrimary,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  myCard: {
+    position: 'absolute',
+    left: 18,
+    right: 132,
+    bottom: 168,
+    zIndex: 34,
+    backgroundColor: 'rgba(255,255,255,0.96)',
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    ...SHADOW.card,
+  },
+  myCardKicker: {
+    color: COLORS.accent,
+    fontSize: 11,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
+  },
+  myCardTitle: {
+    color: COLORS.textPrimary,
     fontSize: 18,
     fontWeight: '900',
-    letterSpacing: -0.4,
+    marginTop: 4,
   },
-  bottomDock: {
-    position: 'absolute',
-    bottom: 34,
-    left: 18,
+  myCardMetrics: {
     flexDirection: 'row',
     gap: 10,
-    zIndex: 35,
-    alignItems: 'center',
+    marginTop: 12,
   },
-  dockButton: {
-    width: 54,
-    height: 54,
-    borderRadius: 18,
-    backgroundColor: 'rgba(30,41,59,0.85)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000000',
-    shadowOpacity: 0.25,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 6,
+  myMetric: {
+    flex: 1,
+    backgroundColor: COLORS.bgInput,
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
   },
-  meBubble: {
-    width: 62,
-    height: 62,
-    borderRadius: 20,
-    padding: 3,
-    backgroundColor: '#38BDF8',
-    marginLeft: 6,
-    shadowColor: '#38BDF8',
-    shadowOpacity: 0.4,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
+  myMetricValue: {
+    color: COLORS.textPrimary,
+    fontSize: 15,
+    fontWeight: '900',
   },
-  meBubbleImage: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 17,
-    backgroundColor: '#0F172A',
+  myMetricLabel: {
+    color: COLORS.textMuted,
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    marginTop: 4,
   },
   momentPin: {
-    width: 48,
-    height: 48,
+    width: 50,
+    height: 50,
     borderRadius: 18,
-    backgroundColor: '#1E293B',
+    backgroundColor: COLORS.white,
     padding: 3,
     borderWidth: 2,
-    borderColor: '#F472B6',
-    shadowColor: '#000000',
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 6,
+    borderColor: COLORS.pink,
+    ...SHADOW.card,
   },
   momentImage: {
     width: '100%',
     height: '100%',
     borderRadius: 13,
-    backgroundColor: '#334155',
+    backgroundColor: COLORS.bgSoft,
+  },
+  interactionOverlay: {
+    position: 'absolute',
+    top: '35%',
+    alignSelf: 'center',
+    alignItems: 'center',
+    zIndex: 999,
+    backgroundColor: 'rgba(255,255,255,0.98)',
+    borderRadius: 28,
+    paddingHorizontal: 28,
+    paddingVertical: 20,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    ...SHADOW.card,
+  },
+  interactionEmoji: {
+    fontSize: 28,
+    color: COLORS.textPrimary,
+    fontWeight: '900',
+  },
+  interactionLabel: {
+    color: COLORS.textSecondary,
+    fontSize: 15,
+    fontWeight: '700',
+    marginTop: 8,
+    textAlign: 'center',
   },
 });

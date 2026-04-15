@@ -1,10 +1,11 @@
 {
   "rules": {
+    ".read": "auth != null",
+    ".write": "auth != null",
     "locations": {
       "$uid": {
-        ".read": "auth != null && root.child('location_visibility').child(auth.uid).child($uid).val() === true",
-        ".write": "auth != null && auth.uid === $uid",
-        ".validate": "newData.hasChildren(['uid', 'latitude', 'longitude', 'updatedAt']) && newData.child('uid').val() === auth.uid"
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid === $uid"
       }
     },
     "location_visibility": {
@@ -13,6 +14,12 @@
         "$visibleUid": {
           ".write": "auth != null && auth.uid === $uid"
         }
+      }
+    },
+    "interactions": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null"
       }
     }
   }

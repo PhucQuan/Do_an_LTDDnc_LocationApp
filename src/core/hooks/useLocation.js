@@ -4,32 +4,48 @@ import * as Battery from 'expo-battery';
 import { Alert } from 'react-native';
 import { startBackgroundTracking } from '../location/backgroundTracking';
 
-const WATCH_OPTIONS = {
-  accuracy: Location.Accuracy.BestForNavigation,
-  timeInterval: 3000,
-  distanceInterval: 3,
-  mayShowUserSettingsDialog: true,
+// ── Adaptive tracking tiers ────────────────────────────────────────────────
+// ACTIVE   (car/bike): speed > 10 km/h  →  every 3s, 5m accuracy
+// WALKING  (on foot):  speed > 1 km/h   →  every 10s, 10m accuracy
+// IDLE     (stationary): else           →  every 90s, 20m accuracy (huge battery saving)
+const TRACKING_TIERS = {
+  ACTIVE: {
+    accuracy: Location.Accuracy.BestForNavigation,
+    timeInterval: 3000,
+    distanceInterval: 5,
+  },
+  WALKING: {
+    accuracy: Location.Accuracy.Balanced,
+    timeInterval: 10000,
+    distanceInterval: 10,
+  },
+  IDLE: {
+    accuracy: Location.Accuracy.Low,
+    timeInterval: 90000,
+    distanceInterval: 20,
+  },
 };
 
-const MOVING_SPEED_THRESHOLD = 1.6;
-const WALKING_SPEED_THRESHOLD = 0.25;
+// Speed thresholds in m/s
+const ACTIVE_SPEED_MS = 2.8;   // ~10 km/h
+const WALKING_SPEED_MS = 0.28; // ~1 km/h
+// How long to wait before downgrading to IDLE
+const IDLE_DOWNGRADE_DELAY = 2 * 60 * 1000; // 2 minutes
+
+function getTier(speedMs = 0) {
+  if (speedMs >= ACTIVE_SPEED_MS) return 'ACTIVE';
+  if (speedMs >= WALKING_SPEED_MS) return 'WALKING';
+  return 'IDLE';
+}
 
 function getStatusLabel(speed = 0) {
-  if (speed >= MOVING_SPEED_THRESHOLD) {
-    return 'dang chay';
-  }
-
-  if (speed >= WALKING_SPEED_THRESHOLD) {
-    return 'dang di chuyen';
-  }
-
+  if (speed >= 1.6) return 'dang chay';
+  if (speed >= 0.25) return 'dang di chuyen';
   return 'dung yen';
 }
 
 function normalizeLocationData(location) {
-  if (!location?.coords) {
-    return null;
-  }
+  if (!location?.coords) return null;
 
   const safeSpeed = Math.max(location.coords.speed ?? 0, 0);
 
@@ -55,7 +71,11 @@ export const useLocation = () => {
   const [location, setLocation] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [trackingTier, setTrackingTier] = useState('WALKING');
+
   const subscriptionRef = useRef(null);
+  const currentTierRef = useRef('WALKING');
+  const idleTimerRef = useRef(null);
 
   const ensurePermission = useCallback(async () => {
     const providerStatus = await Location.hasServicesEnabledAsync();
@@ -80,6 +100,83 @@ export const useLocation = () => {
 
     return true;
   }, []);
+
+  const stopWatching = useCallback(() => {
+    if (subscriptionRef.current) {
+      subscriptionRef.current.remove();
+      subscriptionRef.current = null;
+    }
+    if (idleTimerRef.current) {
+      clearTimeout(idleTimerRef.current);
+      idleTimerRef.current = null;
+    }
+  }, []);
+
+  const startWatching = useCallback(async (tier = 'WALKING') => {
+    try {
+      const hasPermission = await ensurePermission();
+      if (!hasPermission) {
+        setIsLoading(false);
+        return;
+      }
+
+      stopWatching();
+      currentTierRef.current = tier;
+      setTrackingTier(tier);
+
+      const watchOptions = TRACKING_TIERS[tier];
+
+      const subscription = await Location.watchPositionAsync(
+        watchOptions,
+        async (nextLocation) => {
+          const batteryLevel = await Battery.getBatteryLevelAsync().catch(() => null);
+          const normalized = normalizeLocationData({
+            ...nextLocation,
+            meta: {
+              batteryLevel: batteryLevel == null ? null : Math.round(batteryLevel * 100),
+            },
+          });
+
+          setLocation(normalized);
+          setIsLoading(false);
+
+          // ── Adaptive tier switching ────────────────────────────────────
+          const speed = nextLocation.coords?.speed ?? 0;
+          const newTier = getTier(speed);
+
+          if (newTier === 'IDLE') {
+            // Don't downgrade instantly — wait 2min to confirm truly idle
+            if (!idleTimerRef.current && currentTierRef.current !== 'IDLE') {
+              idleTimerRef.current = setTimeout(() => {
+                idleTimerRef.current = null;
+                if (currentTierRef.current !== 'IDLE') {
+                  console.log('[Adaptive] Downgrading to IDLE (battery saver)');
+                  startWatching('IDLE');
+                }
+              }, IDLE_DOWNGRADE_DELAY);
+            }
+          } else {
+            // Moving again — cancel any pending idle downgrade
+            if (idleTimerRef.current) {
+              clearTimeout(idleTimerRef.current);
+              idleTimerRef.current = null;
+            }
+            // Upgrade/downgrade if tier changed
+            if (newTier !== currentTierRef.current) {
+              console.log(`[Adaptive] Switching: ${currentTierRef.current} → ${newTier}`);
+              startWatching(newTier);
+            }
+          }
+        }
+      );
+
+      subscriptionRef.current = subscription;
+    } catch (error) {
+      console.error('[useLocation] Khong the bat dau theo doi vi tri:', error);
+      setErrorMsg(error.message);
+      setIsLoading(false);
+    }
+  }, [ensurePermission, stopWatching]);
 
   const getLocation = useCallback(async () => {
     setIsLoading(true);
@@ -114,56 +211,14 @@ export const useLocation = () => {
     }
   }, [ensurePermission]);
 
-  const stopWatching = useCallback(() => {
-    if (subscriptionRef.current) {
-      subscriptionRef.current.remove();
-      subscriptionRef.current = null;
-    }
-  }, []);
-
-  const startWatching = useCallback(async () => {
-    try {
-      const hasPermission = await ensurePermission();
-      if (!hasPermission) {
-        setIsLoading(false);
-        return;
-      }
-
-      stopWatching();
-
-      const subscription = await Location.watchPositionAsync(
-        WATCH_OPTIONS,
-        async (nextLocation) => {
-          const batteryLevel = await Battery.getBatteryLevelAsync().catch(() => null);
-          setLocation(
-            normalizeLocationData({
-              ...nextLocation,
-              meta: {
-                batteryLevel: batteryLevel == null ? null : Math.round(batteryLevel * 100),
-              },
-            })
-          );
-          setIsLoading(false);
-        }
-      );
-
-      subscriptionRef.current = subscription;
-    } catch (error) {
-      console.error('[useLocation] Khong the bat dau theo doi vi tri:', error);
-      setErrorMsg(error.message);
-      setIsLoading(false);
-    }
-  }, [ensurePermission, stopWatching]);
-
   useEffect(() => {
     let isMounted = true;
 
     getLocation().then((firstLocation) => {
-      if (!isMounted || !firstLocation) {
-        return;
-      }
+      if (!isMounted || !firstLocation) return;
 
-      startWatching();
+      // Start at WALKING tier; adaptive logic upgrades/downgrades automatically
+      startWatching('WALKING');
       startBackgroundTracking().catch(() => {});
     });
 
@@ -177,6 +232,7 @@ export const useLocation = () => {
     location,
     errorMsg,
     isLoading,
+    trackingTier,
     getLocation,
     startWatching,
     stopWatching,

@@ -14,26 +14,23 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, SendHorizonal } from 'lucide-react-native';
 import { auth } from '../../../infrastructure/firebase/firebase';
 import { chatService } from '../../../infrastructure/firebase/chatService';
+import { COLORS, SHADOW } from '../../theme';
 
 function getInitials(name = 'ME') {
-  return name
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? '')
-    .join('') || 'ME';
+  return (
+    name
+      .split(' ')
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? '')
+      .join('') || 'ME'
+  );
 }
 
 function formatTime(timestamp) {
   const date = timestamp?.toDate?.() ? timestamp.toDate() : null;
-  if (!date) {
-    return 'Now';
-  }
-
-  return date.toLocaleTimeString([], {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  if (!date) return 'Now';
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
 export default function GroupChatScreen({ navigation, route }) {
@@ -66,9 +63,7 @@ export default function GroupChatScreen({ navigation, route }) {
   }, [groupId]);
 
   const handleSend = async () => {
-    if (!draft.trim() || sending) {
-      return;
-    }
+    if (!draft.trim() || sending) return;
 
     setSending(true);
     try {
@@ -83,7 +78,7 @@ export default function GroupChatScreen({ navigation, route }) {
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <ArrowLeft color="#F8FAFC" size={20} />
+          <ArrowLeft color={COLORS.textPrimary} size={20} />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>{groupName}</Text>
@@ -91,12 +86,9 @@ export default function GroupChatScreen({ navigation, route }) {
         </View>
       </View>
 
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         {loading ? (
-          <ActivityIndicator color="#38BDF8" style={{ marginTop: 28 }} />
+          <ActivityIndicator color={COLORS.accent} style={{ marginTop: 28 }} />
         ) : (
           <FlatList
             data={messages}
@@ -106,19 +98,15 @@ export default function GroupChatScreen({ navigation, route }) {
               const isMe = item.senderId === currentUser.id;
               return (
                 <View style={[styles.messageRow, isMe && styles.messageRowRight]}>
-                  {!isMe && (
+                  {!isMe ? (
                     <View style={styles.avatarWrap}>
                       <Text style={styles.avatarText}>{item.senderInitials || 'U'}</Text>
                     </View>
-                  )}
+                  ) : null}
                   <View style={[styles.messageBubble, isMe && styles.messageBubbleMine]}>
-                    {!isMe && <Text style={styles.senderName}>{item.senderName}</Text>}
-                    <Text style={[styles.messageText, isMe && styles.messageTextMine]}>
-                      {item.text}
-                    </Text>
-                    <Text style={[styles.messageTime, isMe && styles.messageTimeMine]}>
-                      {formatTime(item.createdAt)}
-                    </Text>
+                    {!isMe ? <Text style={styles.senderName}>{item.senderName}</Text> : null}
+                    <Text style={[styles.messageText, isMe && styles.messageTextMine]}>{item.text}</Text>
+                    <Text style={[styles.messageTime, isMe && styles.messageTimeMine]}>{formatTime(item.createdAt)}</Text>
                   </View>
                 </View>
               );
@@ -136,7 +124,7 @@ export default function GroupChatScreen({ navigation, route }) {
           <TextInput
             style={styles.input}
             placeholder="Send a message..."
-            placeholderTextColor="#64748B"
+            placeholderTextColor={COLORS.textMuted}
             value={draft}
             onChangeText={setDraft}
           />
@@ -145,11 +133,7 @@ export default function GroupChatScreen({ navigation, route }) {
             onPress={handleSend}
             disabled={!draft.trim() || sending}
           >
-            {sending ? (
-              <ActivityIndicator color="#062033" />
-            ) : (
-              <SendHorizonal color="#062033" size={18} />
-            )}
+            {sending ? <ActivityIndicator color={COLORS.white} /> : <SendHorizonal color={COLORS.white} size={18} />}
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -160,7 +144,7 @@ export default function GroupChatScreen({ navigation, route }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0B1220',
+    backgroundColor: COLORS.bg,
   },
   flex: {
     flex: 1,
@@ -179,15 +163,17 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: COLORS.bgElevated,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   headerTitle: {
-    color: '#F8FAFC',
+    color: COLORS.textPrimary,
     fontSize: 18,
     fontWeight: '900',
   },
   headerSubtitle: {
-    color: '#94A3B8',
+    color: COLORS.textSecondary,
     fontSize: 12,
     marginTop: 4,
   },
@@ -209,65 +195,66 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: '#223047',
+    backgroundColor: COLORS.bgSoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarText: {
-    color: '#F8FAFC',
+    color: COLORS.textPrimary,
     fontSize: 11,
     fontWeight: '900',
   },
   messageBubble: {
     maxWidth: '78%',
-    backgroundColor: '#162234',
+    backgroundColor: COLORS.bgElevated,
     borderRadius: 20,
     paddingHorizontal: 14,
     paddingVertical: 12,
     borderWidth: 1,
-    borderColor: 'rgba(148,163,184,0.1)',
+    borderColor: COLORS.border,
+    ...SHADOW.card,
   },
   messageBubbleMine: {
-    backgroundColor: '#FACC15',
-    borderColor: '#FACC15',
+    backgroundColor: COLORS.accent,
+    borderColor: COLORS.accent,
   },
   senderName: {
-    color: '#7DD3FC',
+    color: COLORS.accent,
     fontSize: 11,
     fontWeight: '800',
     marginBottom: 6,
   },
   messageText: {
-    color: '#F8FAFC',
+    color: COLORS.textPrimary,
     fontSize: 14,
     lineHeight: 20,
   },
   messageTextMine: {
-    color: '#062033',
+    color: COLORS.white,
   },
   messageTime: {
-    color: '#94A3B8',
+    color: COLORS.textMuted,
     fontSize: 10,
     fontWeight: '700',
     marginTop: 8,
   },
   messageTimeMine: {
-    color: '#334155',
+    color: 'rgba(255,255,255,0.78)',
   },
   emptyCard: {
-    backgroundColor: '#111C2E',
+    backgroundColor: COLORS.bgElevated,
     borderRadius: 24,
     padding: 18,
     borderWidth: 1,
-    borderColor: 'rgba(148,163,184,0.12)',
+    borderColor: COLORS.border,
   },
   emptyTitle: {
-    color: '#F8FAFC',
+    color: COLORS.textPrimary,
     fontSize: 16,
     fontWeight: '900',
   },
   emptyText: {
-    color: '#94A3B8',
+    color: COLORS.textSecondary,
     fontSize: 13,
     marginTop: 8,
   },
@@ -278,19 +265,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 14,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(148,163,184,0.08)',
-    backgroundColor: '#0B1220',
+    borderTopColor: COLORS.border,
+    backgroundColor: COLORS.bg,
   },
   input: {
     flex: 1,
     minHeight: 52,
     borderRadius: 18,
-    backgroundColor: '#111C2E',
+    backgroundColor: COLORS.bgElevated,
     paddingHorizontal: 16,
-    color: '#F8FAFC',
+    color: COLORS.textPrimary,
     fontSize: 14,
     borderWidth: 1,
-    borderColor: 'rgba(148,163,184,0.12)',
+    borderColor: COLORS.border,
   },
   sendButton: {
     width: 52,
@@ -298,7 +285,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FACC15',
+    backgroundColor: COLORS.ink,
   },
   sendButtonDisabled: {
     opacity: 0.55,

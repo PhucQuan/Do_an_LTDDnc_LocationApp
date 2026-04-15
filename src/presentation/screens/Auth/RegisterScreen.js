@@ -71,6 +71,7 @@ function TabToggle({ isOtpSent }) {
 // ── Main RegisterScreen ───────────────────────────────────────────────────
 const RegisterScreen = ({ navigation }) => {
   const [fullName, setFullName] = useState('');
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
@@ -89,8 +90,13 @@ const RegisterScreen = ({ navigation }) => {
   }, []);
 
   const handleRequestOtp = async () => {
-    if (!fullName || !email || !password || !phone) {
+    if (!fullName || !username || !email || !password || !phone) {
       Alert.alert('Lỗi', 'Vui lòng điền đầy đủ thông tin');
+      return;
+    }
+    const usernameRegex = /^[a-zA-Z0-9_.-]{3,20}$/;
+    if (!usernameRegex.test(username)) {
+      Alert.alert('Lỗi', 'Username không hợp lệ (3-20 ký tự, không dấu cách)');
       return;
     }
     if (password !== confirmPassword) {
@@ -118,7 +124,7 @@ const RegisterScreen = ({ navigation }) => {
     if (!otp) { Alert.alert('Lỗi', 'Vui lòng nhập mã OTP'); return; }
     setLoading(true);
     try {
-      await authService.verifyAndRegister(email, password, fullName, phone, otp);
+      await authService.verifyAndRegister(email, password, fullName, phone, username, otp);
       Alert.alert('Thành công 🎉', 'Tài khoản đã được tạo thành công!');
     } catch (error) {
       Alert.alert('Đăng ký thất bại', error.message);
@@ -155,6 +161,7 @@ const RegisterScreen = ({ navigation }) => {
               {!isOtpSent ? (
                 <>
                   <GlassInput icon="👤" placeholder="Họ và tên" value={fullName} onChangeText={setFullName} autoCapitalize="words" />
+                  <GlassInput icon="@" placeholder="Username" value={username} onChangeText={setUsername} autoCapitalize="none" />
                   <GlassInput icon="✉️" placeholder="Email" value={email} onChangeText={setEmail} keyboardType="email-address" />
                   <GlassInput icon="📞" placeholder="Số điện thoại" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
                   <GlassInput icon="🔒" placeholder="Mật khẩu" value={password} onChangeText={setPassword} secureTextEntry />
