@@ -1,0 +1,70 @@
+{
+  "expo": {
+    "name": "LocationApp_DoanLTDTnc",
+    "slug": "LocationApp_DoanLTDTnc",
+    "version": "1.0.0",
+    "jsEngine": "jsc",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "GeoLink uses your location to show live positions on the map.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "GeoLink uses background location so your friends can see live updates.",
+        "NSPhotoLibraryUsageDescription": "GeoLink needs access to your library so you can share map moments.",
+        "NSCameraUsageDescription": "GeoLink uses the camera so you can capture map moments."
+      },
+      "config": {
+        "googleMapsApiKey": "YOUR_IOS_GOOGLE_MAPS_API_KEY"
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "package": "com.anonymous.LocationApp_DoanLTDTnc",
+      "config": {
+        "googleMaps": {
+          "apiKey": "YOUR_ANDROID_GOOGLE_MAPS_API_KEY"
+        }
+      },
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "CAMERA",
+        "READ_MEDIA_IMAGES"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "GeoLink uses your location to show live positions on the map.",
+          "locationAlwaysAndWhenInUsePermission": "GeoLink uses background location so your friends can see live updates.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isIosBackgroundLocationEnabled": true
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "GeoLink needs your photos so you can share a map moment.",
+          "cameraPermission": "GeoLink needs the camera so you can capture a map moment."
+        }
+      ]
+    ],
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}

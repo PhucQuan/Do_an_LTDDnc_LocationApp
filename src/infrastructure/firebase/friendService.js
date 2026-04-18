@@ -1,0 +1,151 @@
+import { db } from './firebase';
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  setDoc,
+  doc,
+  getDoc,
+  updateDoc,
+  deleteDoc,
+  serverTimestamp,
+  onSnapshot
+} from "firebase/firestore";
+import { FriendUser } from "../../domain/entities/FriendUser";
+import { User } from "../../domain/entities/User";
+
+class FriendService {
+  /**
+   * Gửi yêu cầu kết bạn (Trạng thái mặc định là pending)
+   */
+  async addFriend(currentUserId, targetUserId) {
+    try {
+      if (currentUserId === targetUserId) throw new Error("Không thể kết bạn với chính mình.");
+
+      const friendshipId = FriendUser.generateId(currentUserId, targetUserId);
+      const docSnap = await getDoc(doc(db, "friendships", friendshipId));
+
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data.status === 'accepted') throw new Error("Hai bạn đã là bạn bè.");
+        if (data.status === 'pending') throw new Error("Yêu cầu kết bạn đang chờ xử lý.");
+      }
+
+      const newFriendship = new FriendUser({
+        id: friendshipId,
+        userId1: currentUserId,
+        userId2: targetUserId,
+        status: 'pending',
+        requestSentBy: currentUserId
+      });
+
+      await setDoc(doc(db, "friendships", friendshipId), {
+        ...newFriendship.toFirestore(),
+        updatedAt: serverTimestamp()
+      });
+
+      return true;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Chấp nhận yêu cầu kết bạn
+   */
+  async acceptFriendRequest(friendshipId) {
+    try {
+      const docRef = doc(db, "friendships", friendshipId);
+      await updateDoc(docRef, {
+        status: 'accepted',
+        updatedAt: serverTimestamp()
+      });
+      return true;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Từ chối hoặc hủy yêu cầu kết bạn
+   */
+  async declineFriendRequest(friendshipId) {
+    try {
+      await deleteDoc(doc(db, "friendships", friendshipId));
+      return true;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Lấy danh sách yêu cầu kết bạn đang chờ mình phê duyệt
+   */
+  subscribeToPendingRequests(currentUid, callback) {
+    const q = query(
+      collection(db, "friendships"),
+      where("status", "==", "pending"),
+      where("requestSentBy", "!=", currentUid) // Chỉ lấy những cái KHÔNG PHẢI do mình gửi
+    );
+
+    return onSnapshot(q, async (snapshot) => {
+      const requests = [];
+      for (const d of snapshot.docs) {
+        const data = d.data();
+        // Kiểm tra xem mình có phải là 1 trong 2 người trong quan hệ này không
+        if (data.userId1 === currentUid || data.userId2 === currentUid) {
+          const senderId = data.requestSentBy;
+          const userSnap = await getDoc(doc(db, "users", senderId));
+          if (userSnap.exists()) {
+            requests.push({
+              friendshipId: d.id,
+              sender: User.fromFirestore(userSnap)
+            });
+          }
+        }
+      }
+      callback(requests);
+    });
+  }
+
+  /**
+   * Tìm kiếm hệ thống qua Email
+   */
+  async searchUserByEmail(email) {
+    const usersRef = collection(db, "users");
+    const q = query(usersRef, where("email", "==", email.toLowerCase().trim()));
+    const querySnapshot = await getDocs(q);
+    if (querySnapshot.empty) return null;
+    return User.fromFirestore(querySnapshot.docs[0]);
+  }
+
+  /**
+   * Tìm kiếm hệ thống qua Username
+   */
+  async searchUserByUsername(username) {
+    const usersRef = collection(db, "users");
+    const q = query(usersRef, where("username", "==", username.toLowerCase().trim()));
+    const querySnapshot = await getDocs(q);
+    if (querySnapshot.empty) return null;
+    return User.fromFirestore(querySnapshot.docs[0]);
+  }
+
+  /**
+   * Tìm kiếm hệ thống qua displayName (tên hiển thị) — không phân biệt hoa thường
+   */
+  async searchUserByName(name) {
+    const usersRef = collection(db, "users");
+    const trimmed = name.trim().toLowerCase();
+    // Lấy tất cả users rồi lọc client-side (không cần index, không phân biệt hoa/thường)
+    const q = query(collection(db, "users"), where("name", "!=", ""), where("name", "!=", null));
+    const querySnapshot = await getDocs(q);
+    const found = querySnapshot.docs.find(
+      (d) => d.data().name?.toLowerCase().trim() === trimmed
+    );
+    if (!found) return null;
+    return User.fromFirestore(found);
+  }
+}
+
+export const friendService = new FriendService();
