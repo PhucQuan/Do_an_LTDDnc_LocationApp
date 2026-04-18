@@ -130,6 +130,22 @@ class FriendService {
     if (querySnapshot.empty) return null;
     return User.fromFirestore(querySnapshot.docs[0]);
   }
+
+  /**
+   * Tìm kiếm hệ thống qua displayName (tên hiển thị) — không phân biệt hoa thường
+   */
+  async searchUserByName(name) {
+    const usersRef = collection(db, "users");
+    const trimmed = name.trim().toLowerCase();
+    // Lấy tất cả users rồi lọc client-side (không cần index, không phân biệt hoa/thường)
+    const q = query(collection(db, "users"), where("name", "!=", ""), where("name", "!=", null));
+    const querySnapshot = await getDocs(q);
+    const found = querySnapshot.docs.find(
+      (d) => d.data().name?.toLowerCase().trim() === trimmed
+    );
+    if (!found) return null;
+    return User.fromFirestore(found);
+  }
 }
 
 export const friendService = new FriendService();

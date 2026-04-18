@@ -1,7 +1,9 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Animated,
+  Linking,
+  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -73,6 +75,27 @@ export default function MapScreen({ navigation }) {
   const [incomingInteraction, setIncomingInteraction] = useState(null);
   const [showMyCard, setShowMyCard] = useState(false);
   const [selectedFriendUid, setSelectedFriendUid] = useState(null);
+
+  const routeParams = navigation.getState()?.routes?.find((r) => r.name === 'Map')?.params ?? {};
+  const focusUid = routeParams?.focusUid;
+
+  useEffect(() => {
+    if (!focusUid) return;
+
+    const timer = setTimeout(() => {
+      const user = otherUsers[focusUid];
+      if (user) {
+        focusFriend(focusUid, user);
+      }
+      // Clear param so re-entering the map doesn't re-focus
+      const mapRoute = navigation.getState()?.routes?.find((r) => r.name === 'Map');
+      if (mapRoute?.params?.focusUid) {
+        navigation.setParams({ focusUid: undefined });
+      }
+    }, 600);
+
+    return () => clearTimeout(timer);
+  }, [focusUid, otherUsers]);
 
   const coords = location?.coords ?? null;
   const currentName =
@@ -274,7 +297,11 @@ export default function MapScreen({ navigation }) {
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (permission.status !== 'granted') {
-        Alert.alert('Permission needed', 'Please allow photo access to share a live moment.');
+        Alert.alert(
+          'Permission needed',
+          'Please allow photo access in Settings to share a live moment.',
+          [{ text: 'OK', style: 'cancel' }]
+        );
         return;
       }
 
@@ -305,6 +332,25 @@ export default function MapScreen({ navigation }) {
       { text: 'Library', onPress: () => handleShareMoment('library') },
     ]);
   };
+
+  const handleNavigate = useCallback(() => {
+    if (!selectedUser?.latitude || !selectedUser?.longitude) return;
+
+    const { latitude, longitude } = selectedUser;
+    const label = encodeURIComponent(selectedUser.displayName || 'Friend');
+
+    // Android: Google Maps
+    // iOS: Apple Maps (ua=1 forces Apple Maps on iOS, otherwise uses default)
+    const url = Platform.select({
+      android: `google.navigation:q=${latitude},${longitude}&labels=${label}`,
+      ios: `maps://app?daddr=${latitude},${longitude}&q=${label}`,
+    });
+
+    Linking.openURL(url).catch(() => {
+      // Fallback: open plain Google Maps web
+      Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}`);
+    });
+  }, [selectedUser]);
 
   if (isLoading || !coords) {
     return (
@@ -537,6 +583,7 @@ export default function MapScreen({ navigation }) {
             locationService.pushInteraction(selectedUser.uid, emoji);
           }
         }}
+        onNavigate={handleNavigate}
       />
 
       <MomentViewerModal moment={selectedMoment} onClose={() => setSelectedMoment(null)} />

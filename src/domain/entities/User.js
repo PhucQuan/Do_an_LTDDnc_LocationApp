@@ -1,6 +1,7 @@
 export class User {
-  constructor({ id, name, email, phone, avatarUrl, username, createdAt, privacyMap }) {
+  constructor({ id, uid, name, email, phone, avatarUrl, username, createdAt, privacyMap }) {
     this.id = id;
+    this.uid = uid || id;   // uid = document ID (Firestore)
     this.name = name;
     this.email = email;
     this.phone = phone;
@@ -17,6 +18,7 @@ export class User {
     const data = doc.data();
     return new User({
       id: doc.id,
+      uid: doc.id,  // gán uid = document ID để addFriend dùng được
       ...data
     });
   }

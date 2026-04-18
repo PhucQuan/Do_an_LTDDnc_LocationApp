@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Image,
   ScrollView,
@@ -36,6 +37,7 @@ function StatCard({ label, value, accent }) {
 export default function ProfileScreen({ navigation }) {
   const [profile, setProfile] = useState(null);
   const [stats, setStats] = useState({ groups: 0, friends: 0, trails: 0 });
+  const [loggingOut, setLoggingOut] = useState(false);
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -82,9 +84,11 @@ export default function ProfileScreen({ navigation }) {
         text: 'Log out',
         style: 'destructive',
         onPress: async () => {
+          setLoggingOut(true);
           try {
             await authService.logout();
           } catch {
+            setLoggingOut(false);
             Alert.alert('Error', 'Could not log out. Please try again.');
           }
         },
@@ -192,9 +196,13 @@ export default function ProfileScreen({ navigation }) {
           </Text>
         </View>
 
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <LogOut color={COLORS.white} size={18} />
-          <Text style={styles.logoutText}>Log out</Text>
+        <TouchableOpacity style={[styles.logoutButton, loggingOut && styles.logoutButtonLoading]} onPress={handleLogout} disabled={loggingOut}>
+          {loggingOut ? (
+            <ActivityIndicator color={COLORS.white} size="small" />
+          ) : (
+            <LogOut color={COLORS.white} size={18} />
+          )}
+          <Text style={styles.logoutText}>{loggingOut ? 'Logging out…' : 'Log out'}</Text>
         </TouchableOpacity>
 
         <View style={{ height: 120 }} />
@@ -341,6 +349,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     flexDirection: 'row',
     gap: 10,
+  },
+  logoutButtonLoading: {
+    opacity: 0.7,
   },
   logoutText: {
     color: COLORS.white,

@@ -192,8 +192,10 @@ class AuthService {
   }
 
   async logout() {
+    // signOut trước để đảm bảo onAuthStateChanged fire → isAuthenticated = false
+    await signOut(auth);
+    // clear location sau khi đã sign out thành công
     await locationService.clearMyLocation();
-    return await signOut(auth);
   }
 
   subscribe(callback) {
@@ -209,13 +211,16 @@ class AuthService {
           const userDoc = await getDoc(doc(db, "users", firebaseUser.uid));
 
           if (userDoc.exists()) {
-            callback(User.fromFirestore(userDoc));
+            const user = User.fromFirestore(userDoc);
+            user.uid = firebaseUser.uid; // đảm bảo uid = auth UID
+            callback(user);
             return;
           }
 
           // If the Firestore profile has not been created yet, still let the app continue.
           callback({
             id: firebaseUser.uid,
+            uid: firebaseUser.uid,
             email: firebaseUser.email,
             name: firebaseUser.displayName || firebaseUser.email?.split("@")[0] || "Explorer",
           });
@@ -223,6 +228,7 @@ class AuthService {
           console.error("[AuthService] Failed to load profile during auth bootstrap:", error);
           callback({
             id: firebaseUser.uid,
+            uid: firebaseUser.uid,
             email: firebaseUser.email,
             name: firebaseUser.displayName || firebaseUser.email?.split("@")[0] || "Explorer",
           });

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Image,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -10,48 +11,100 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ChevronRight, Gift, MessageCircle, Plus, Users } from 'lucide-react-native';
-import { auth } from '../../../infrastructure/firebase/firebase';
+import { auth, db } from '../../../infrastructure/firebase/firebase';
 import { chatService } from '../../../infrastructure/firebase/chatService';
 import { COLORS, SHADOW } from '../../theme';
 
+function getAvatarUri(name) {
+  return `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'U')}&background=ffffff&color=2563eb&bold=true&size=256`;
+}
+
 export default function ChatListScreen({ navigation }) {
   const [groups, setGroups] = useState([]);
+  const [directChats, setDirectChats] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const myUid = auth.currentUser?.uid;
+
   useEffect(() => {
-    const uid = auth.currentUser?.uid;
-    if (!uid) return undefined;
-    return chatService.subscribeToUserGroups(uid, (list) => {
+    if (!myUid) return undefined;
+
+    const unsubGroups = chatService.subscribeToUserGroups(myUid, (list) => {
       setGroups(list);
+    });
+
+    const unsubDirect = chatService.subscribeToDirectChats(myUid, (list) => {
+      setDirectChats(list);
       setLoading(false);
     });
-  }, []);
+
+    return () => {
+      unsubGroups();
+      unsubDirect();
+    };
+  }, [myUid]);
+
+  // Build a merged flat list: groups first, then direct chats
+  const allChats = [
+    ...groups.map((g) => ({ _type: 'group', ...g })),
+    ...directChats.map((d) => ({ _type: 'direct', ...d })),
+  ];
 
   const totalMembers = groups.reduce((acc, g) => acc + (g.members?.length || 0), 0);
 
-  const renderRoom = ({ item }) => (
-    <TouchableOpacity
-      style={styles.roomCard}
-      onPress={() => navigation.navigate('GroupChat', { groupId: item.id, groupName: item.name })}
-    >
-      <View style={styles.roomIconWrap}>
-        <LinearGradient colors={[COLORS.accent, COLORS.purple]} style={StyleSheet.absoluteFill} />
-        <Users color={COLORS.white} size={24} />
-      </View>
-      <View style={styles.roomBody}>
-        <Text style={styles.roomName}>{item.name}</Text>
-        <Text style={styles.roomMeta}>{item.members.length} members</Text>
-        {item.lastMessage ? (
-          <Text style={styles.roomPreview} numberOfLines={1}>
-            {item.lastMessage}
-          </Text>
-        ) : (
-          <Text style={styles.roomPreviewEmpty}>No messages yet. Tap to open.</Text>
-        )}
-      </View>
-      <ChevronRight color={COLORS.textMuted} size={20} />
-    </TouchableOpacity>
-  );
+  const renderRoom = ({ item }) => {
+    if (item._type === 'group') {
+      return (
+        <TouchableOpacity
+          style={styles.roomCard}
+          onPress={() => navigation.navigate('GroupChat', { groupId: item.id, groupName: item.name })}
+        >
+          <View style={styles.roomIconWrap}>
+            <LinearGradient colors={[COLORS.accent, COLORS.purple]} style={StyleSheet.absoluteFill} />
+            <Users color={COLORS.white} size={24} />
+          </View>
+          <View style={styles.roomBody}>
+            <Text style={styles.roomName}>{item.name}</Text>
+            <Text style={styles.roomMeta}>{item.members.length} members</Text>
+            {item.lastMessage ? (
+              <Text style={styles.roomPreview} numberOfLines={1}>
+                {item.lastMessage}
+              </Text>
+            ) : (
+              <Text style={styles.roomPreviewEmpty}>No messages yet. Tap to open.</Text>
+            )}
+          </View>
+          <ChevronRight color={COLORS.textMuted} size={20} />
+        </TouchableOpacity>
+      );
+    }
+
+    // Direct chat
+    const otherMemberId = item.members?.find((m) => m !== myUid) ?? item.id.split('_').find((p) => p !== myUid);
+    const otherName = item.otherName || item.memberNames?.[otherMemberId] || 'Friend';
+    return (
+      <TouchableOpacity
+        style={styles.roomCard}
+        onPress={() => navigation.navigate('DirectChat', { otherUid: otherMemberId, otherName })}
+      >
+        <View style={styles.roomIconWrap}>
+          <Image source={{ uri: getAvatarUri(otherName) }} style={{ width: '100%', height: '100%', borderRadius: 20 }} />
+        </View>
+        <View style={styles.roomBody}>
+          <Text style={styles.roomName}>{otherName}</Text>
+          <Text style={styles.roomMeta}>Direct message</Text>
+          {item.lastMessage ? (
+            <Text style={styles.roomPreview} numberOfLines={1}>
+              {item.lastMessage}
+            </Text>
+          ) : (
+            <Text style={styles.roomPreviewEmpty}>No messages yet.</Text>
+          )}
+        </View>
+        <ChevronRight color={COLORS.textMuted} size={20} />
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -79,17 +132,17 @@ export default function ChatListScreen({ navigation }) {
           <Text style={styles.statLabel}>groups</Text>
         </View>
         <View style={styles.statCard}>
-          <Text style={[styles.statValue, { color: COLORS.green }]}>{totalMembers}</Text>
-          <Text style={styles.statLabel}>members</Text>
+          <Text style={[styles.statValue, { color: COLORS.green }]}>{directChats.length}</Text>
+          <Text style={styles.statLabel}>direct</Text>
         </View>
         <View style={styles.statCard}>
-          <Text style={[styles.statValue, { color: COLORS.pink }]}>Live</Text>
-          <Text style={styles.statLabel}>sync</Text>
+          <Text style={[styles.statValue, { color: COLORS.pink }]}>{totalMembers}</Text>
+          <Text style={styles.statLabel}>members</Text>
         </View>
       </View>
 
       <FlatList
-        data={groups}
+        data={allChats}
         keyExtractor={(item) => item.id}
         renderItem={renderRoom}
         contentContainerStyle={styles.list}
@@ -102,10 +155,10 @@ export default function ChatListScreen({ navigation }) {
               </View>
               <Text style={styles.emptyTitle}>No chats yet</Text>
               <Text style={styles.emptyText}>
-                Create a group to start chatting and sharing locations with your crew.
+                Start a group or message a friend from the Friends tab.
               </Text>
               <TouchableOpacity style={styles.emptyAction} onPress={() => navigation.navigate('CreateGroup')}>
-                <Text style={styles.emptyActionText}>Create first group</Text>
+                <Text style={styles.emptyActionText}>Create group</Text>
               </TouchableOpacity>
             </View>
           ) : null

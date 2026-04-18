@@ -1,4 +1,4 @@
-import { db } from './firebase';
+import { auth, db } from './firebase';
 import {
   addDoc,
   arrayRemove,
@@ -136,6 +136,76 @@ class ChatService {
         console.error('Error subscribing to group messages:', error);
       }
     );
+  }
+
+  // ─── 1-on-1 direct chat ───────────────────────────────────────────
+
+  getOrCreateDirectChat(currentUid, otherUid) {
+    const id = currentUid < otherUid ? `${currentUid}_${otherUid}` : `${otherUid}_${currentUid}`;
+    return doc(db, 'direct_chats', id);
+  }
+
+  async sendDirectMessage(currentUid, otherUid, text) {
+    const trimmedText = text?.trim();
+    if (!trimmedText) throw new Error('Message cannot be empty.');
+
+    const chatDoc = this.getOrCreateDirectChat(currentUid, otherUid);
+    const messagesRef = collection(chatDoc, 'messages');
+    await addDoc(messagesRef, {
+      text: trimmedText,
+      senderId: currentUid,
+      createdAt: serverTimestamp(),
+    });
+    await updateDoc(chatDoc, { lastMessage: trimmedText, updatedAt: serverTimestamp() });
+  }
+
+  subscribeToDirectChats(userId, callback) {
+    return onSnapshot(collection(db, 'direct_chats'), (snapshot) => {
+      console.log('[ChatService] direct_chats snapshot received:', snapshot.size, 'docs');
+      const chats = snapshot.docs
+        .map((d) => {
+          const data = d.data();
+          const isMember = Array.isArray(data.members) && data.members.includes(userId);
+          console.log('[ChatService] Doc:', d.id, 'members:', data.members, 'matches:', isMember, 'otherName:', data.otherName);
+          return { id: d.id, ...data };
+        })
+        .filter((c) => Array.isArray(c.members) && c.members.includes(userId))
+        .sort((a, b) => (b.updatedAt?.toMillis?.() ?? 0) - (a.updatedAt?.toMillis?.() ?? 0));
+      console.log('[ChatService] Filtered direct chats for', userId, ':', chats.length);
+      callback(chats);
+    }, (err) => {
+      console.warn('Direct chats unavailable:', err.message);
+      callback([]);
+    });
+  }
+
+  subscribeToDirectMessages(currentUid, otherUid, callback) {
+    const chatDoc = this.getOrCreateDirectChat(currentUid, otherUid);
+    const q = query(collection(chatDoc, 'messages'), orderBy('createdAt', 'asc'), limit(100));
+    return onSnapshot(q, (snap) => {
+      callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    }, (err) => console.error('Direct messages error:', err));
+  }
+
+  async ensureDirectChatExists(currentUid, otherUid, otherUser) {
+    const chatDoc = this.getOrCreateDirectChat(currentUid, otherUid);
+    const myName = auth.currentUser?.displayName || auth.currentUser?.email?.split('@')[0] || 'Me';
+    const otherName = otherUser?.name || otherUser?.email?.split('@')[0] || 'Friend';
+    console.log('[ChatService] Creating direct chat:', {
+      chatId: this.getOrCreateDirectChat(currentUid, otherUid).id,
+      myUid: currentUid,
+      otherUid,
+      myName,
+      otherName,
+    });
+    await setDoc(chatDoc, {
+      members: [currentUid, otherUid],
+      memberNames: { [currentUid]: myName, [otherUid]: otherName },
+      otherName,
+      lastMessage: '',
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
+    console.log('[ChatService] Direct chat document created successfully');
   }
 }
 

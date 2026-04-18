@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
-import { Animated, Image, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { BatteryFull, MessageCircle, X } from 'lucide-react-native';
+import { Animated, Image, Linking, Platform, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { BatteryFull, MapPin, MessageCircle, Navigation, X } from 'lucide-react-native';
 import { COLORS, SHADOW } from '../../theme';
 
 const EMOJIS = ['Hi', 'Love', 'Fire', 'Haha', 'Eyes'];
@@ -25,7 +25,7 @@ function getFallbackAvatar(name) {
   return `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'Friend')}&background=ffffff&color=1d4ed8&size=256`;
 }
 
-export function SelectedUserSheet({ user, onClose, onChat, onInteract }) {
+export function SelectedUserSheet({ user, onClose, onChat, onInteract, onNavigate }) {
   const translateY = useRef(new Animated.Value(420)).current;
 
   useEffect(() => {
@@ -95,10 +95,18 @@ export function SelectedUserSheet({ user, onClose, onChat, onInteract }) {
           </View>
         </View>
 
-        <TouchableOpacity style={styles.chatButton} onPress={() => onChat(user)}>
-          <MessageCircle color={COLORS.white} size={18} />
-          <Text style={styles.chatText}>Open chat</Text>
-        </TouchableOpacity>
+        <View style={styles.actionRow}>
+          <TouchableOpacity style={styles.chatButton} onPress={() => onChat(user)}>
+            <MessageCircle color={COLORS.white} size={18} />
+            <Text style={styles.chatText}>Open chat</Text>
+          </TouchableOpacity>
+          {onNavigate ? (
+            <TouchableOpacity style={styles.navigateButton} onPress={onNavigate}>
+              <Navigation color={COLORS.white} size={18} />
+              <Text style={styles.navigateText}>Directions</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
       </Animated.View>
     </>
   );
@@ -216,7 +224,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   chatButton: {
-    marginTop: 16,
+    flex: 1,
     minHeight: 54,
     borderRadius: 20,
     backgroundColor: COLORS.ink,
@@ -226,6 +234,26 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   chatText: {
+    color: COLORS.white,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 16,
+  },
+  navigateButton: {
+    minHeight: 54,
+    borderRadius: 20,
+    backgroundColor: COLORS.accent,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 18,
+  },
+  navigateText: {
     color: COLORS.white,
     fontSize: 15,
     fontWeight: '900',

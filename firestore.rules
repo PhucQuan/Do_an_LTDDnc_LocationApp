@@ -62,5 +62,40 @@ service cloud.firestore {
     match /groups_visibility/{visibilityId} {
       allow read, write: if signedIn();
     }
+
+    // ── Direct chats ────────────────────────────────────────────────
+    match /direct_chats/{chatId} {
+      allow read, write: if signedIn();
+      match /messages/{msgId} {
+        allow read, create: if signedIn();
+      }
+    }
+
+    // ── Locations ────────────────────────────────────────────────────
+    match /locations/{uid} {
+      allow read: if signedIn();
+      allow write: if isOwner(uid);
+    }
+
+    // ── Location visibility ──────────────────────────────────────────
+    match /location_visibility/{uid} {
+      allow read: if isOwner(uid);
+      match /{otherUid} {
+        allow write: if isOwner(uid);
+      }
+    }
+
+    // ── Interactions ────────────────────────────────────────────────
+    match /interactions/{uid} {
+      allow read: if isOwner(uid);
+      allow create: if signedIn();
+      allow update, delete: if isOwner(uid);
+    }
+
+    // ── Gifts ───────────────────────────────────────────────────────
+    match /gifts/{giftId} {
+      allow read: if signedIn();
+      allow write: if signedIn();
+    }
   }
 }

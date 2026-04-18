@@ -52,11 +52,25 @@ export default function AddFriendScreen({ navigation }) {
     setIsSearching(true);
     setSearchedUser(null);
     try {
-      const result = await friendService.searchUserByUsername(usernameInput);
+      const input = usernameInput.trim();
+      let result = null;
+
+      // Nếu nhập email → tìm bằng email
+      if (input.includes('@')) {
+        result = await friendService.searchUserByEmail(input);
+      } else {
+        // Thử tìm bằng username trước
+        result = await friendService.searchUserByUsername(input);
+        // Không thấy → thử tìm bằng displayName (tên hiển thị)
+        if (!result) {
+          result = await friendService.searchUserByName(input);
+        }
+      }
+
       if (result) {
         setSearchedUser(result);
       } else {
-        Alert.alert('Not found', 'No user matched that username.');
+        Alert.alert('Not found', 'No user matched that username or email.');
       }
     } catch {
       Alert.alert('Error', 'There was a problem searching for this username.');
@@ -69,7 +83,8 @@ export default function AddFriendScreen({ navigation }) {
     if (!myProfile) return;
     setIsAdding(true);
     try {
-      await friendService.addFriend(myProfile.id || myProfile.uid, targetUid);
+      const myUid = myProfile.uid || myProfile.id;
+      await friendService.addFriend(myUid, targetUid);
       Alert.alert('Sent', 'Friend request sent successfully.');
       setSearchedUser(null);
       setUsernameInput('');
@@ -169,7 +184,7 @@ export default function AddFriendScreen({ navigation }) {
                 </View>
                 <TouchableOpacity
                   style={styles.addBtn}
-                  onPress={() => handleAddFriend(searchedUser.id)}
+                  onPress={() => handleAddFriend(searchedUser.uid)}
                   disabled={isAdding}
                 >
                   {isAdding ? (

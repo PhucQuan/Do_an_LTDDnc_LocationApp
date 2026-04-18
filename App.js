@@ -12,19 +12,12 @@ export default function App() {
   const [initializing, setInitializing] = useState(true);
 
   useEffect(() => {
-    const startupTimeout = setTimeout(() => {
-      setInitializing(false);
-    }, 5000);
-
     const unsubscribe = authService.subscribe((user) => {
       setIsAuthenticated(!!user);
       setInitializing(false);
     });
 
-    return () => {
-      clearTimeout(startupTimeout);
-      unsubscribe();
-    };
+    return unsubscribe;
   }, []);
 
   if (initializing) {

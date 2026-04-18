@@ -1,11 +1,12 @@
 import * as Battery from 'expo-battery';
+import { Platform } from 'react-native';
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 import { locationService } from '../../infrastructure/firebase/locationService';
 
 export const BACKGROUND_LOCATION_TASK = 'geolink-background-location-task';
 
-const ACTIVE_OPTIONS = {
+const BASE_OPTIONS = {
   accuracy: Location.Accuracy.Balanced,
   timeInterval: 15000,
   distanceInterval: 12,
@@ -13,10 +14,24 @@ const ACTIVE_OPTIONS = {
   deferredUpdatesDistance: 25,
   pausesUpdatesAutomatically: false,
   showsBackgroundLocationIndicator: false,
-  foregroundService: {
-    notificationTitle: 'GeoLink is sharing location',
-    notificationBody: 'Realtime location stays active for your friends.',
-  },
+};
+
+// Android bắt buộc taskType; iOS không cần
+const getTrackingOptions = () => {
+  const base = { ...BASE_OPTIONS };
+  if (Platform.OS === 'android') {
+    base.taskType = 'location';
+    base.foregroundService = {
+      notificationTitle: 'GeoLink is sharing location',
+      notificationBody: 'Realtime location stays active for your friends.',
+    };
+  } else {
+    base.foregroundService = {
+      notificationTitle: 'GeoLink is sharing location',
+      notificationBody: 'Realtime location stays active for your friends.',
+    };
+  }
+  return base;
 };
 
 TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
@@ -62,7 +77,7 @@ export async function startBackgroundTracking() {
     return true;
   }
 
-  await Location.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, ACTIVE_OPTIONS);
+  await Location.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, getTrackingOptions());
   return true;
 }
 
