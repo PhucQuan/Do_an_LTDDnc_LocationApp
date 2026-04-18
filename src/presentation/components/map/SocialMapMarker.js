@@ -4,10 +4,24 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Battery, BatteryLow, BatteryMedium } from 'lucide-react-native';
 import { COLORS } from '../../theme';
 
-function getFallbackAvatar(name) {
-  return `https://ui-avatars.com/api/?name=${encodeURIComponent(
-    name || 'Friend'
-  )}&background=ffffff&color=1d4ed8&size=256`;
+const FALLBACK_COLORS = ['#3B82F6', '#8B5CF6', '#EC4899', '#10B981', '#F59E0B', '#EF4444'];
+const AVATAR_SIZE = 64;
+
+function getInitials(name) {
+  if (!name) return '?';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+  return name.slice(0, 2).toUpperCase();
+}
+
+function getFallbackColor(name) {
+  let hash = 0;
+  for (let i = 0; i < (name || '').length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return FALLBACK_COLORS[Math.abs(hash) % FALLBACK_COLORS.length];
 }
 
 function getRingColors(status, isGhostMode) {
@@ -206,7 +220,17 @@ function SocialMapMarkerComponent({
         style={[styles.ring, isMe && styles.ringMe, !isMe && isSelected && styles.ringSelected, !isMe && !isActive && styles.ringIdle]}
       >
         <View style={[styles.innerShell, isMe && styles.innerShellMe]}>
-          <Image source={{ uri: avatarUrl || getFallbackAvatar(name) }} style={styles.image} />
+          {avatarUrl ? (
+            <Image
+              source={{ uri: avatarUrl }}
+              style={[styles.image, isMe && styles.imageMe]}
+              onError={() => {}}
+            />
+          ) : (
+            <View style={[styles.initialsWrap, { backgroundColor: getFallbackColor(name) }]}>
+              <Text style={[styles.initialsText, isMe && styles.initialsTextMe]}>{getInitials(name)}</Text>
+            </View>
+          )}
         </View>
       </LinearGradient>
 
@@ -363,6 +387,25 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 31,
     backgroundColor: COLORS.bgSoft,
+  },
+  imageMe: {
+    borderRadius: 40,
+  },
+  initialsWrap: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 31,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  initialsText: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: COLORS.white,
+    letterSpacing: 0.5,
+  },
+  initialsTextMe: {
+    fontSize: 22,
   },
   dot: {
     position: 'absolute',
