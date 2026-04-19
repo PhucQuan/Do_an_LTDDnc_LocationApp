@@ -5,7 +5,6 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import {
   CircleUserRound,
   Map,
-  MessageCircle,
   Users,
 } from 'lucide-react-native';
 import WelcomeScreen from '../screens/Auth/WelcomeScreen';
@@ -14,12 +13,10 @@ import RegisterScreen from '../screens/Auth/RegisterScreen';
 import ForgotPasswordScreen from '../screens/Auth/ForgotPasswordScreen';
 import MapScreen from '../screens/main/MapScreen';
 import FriendsListScreen from '../screens/main/FriendsListScreen';
-import ChatListScreen from '../screens/main/ChatListScreen';
 import ProfileScreen from '../screens/main/ProfileScreen';
 import AddFriendScreen from '../screens/main/AddFriendScreen';
 import CreateGroupScreen from '../screens/main/CreateGroupScreen';
 import GroupChatScreen from '../screens/main/GroupChatScreen';
-import DirectChatScreen from '../screens/main/DirectChatScreen';
 import PrivacySettingsScreen from '../screens/main/PrivacySettingsScreen';
 import GiftCenterScreen from '../screens/main/GiftCenterScreen';
 import { COLORS, SHADOW } from '../theme';
@@ -99,13 +96,6 @@ function MainTabs() {
         }}
       />
       <Tab.Screen
-        name="Chats"
-        component={ChatListScreen}
-        options={{
-          tabBarIcon: ({ focused }) => <TabIcon focused={focused} label="Chats" Icon={MessageCircle} />,
-        }}
-      />
-      <Tab.Screen
         name="Profile"
         component={ProfileScreen}
         options={{
@@ -134,7 +124,6 @@ function AuthenticatedStack() {
       <MainStack.Screen name="AddFriend" component={AddFriendScreen} />
       <MainStack.Screen name="CreateGroup" component={CreateGroupScreen} />
       <MainStack.Screen name="GroupChat" component={GroupChatScreen} />
-      <MainStack.Screen name="DirectChat" component={DirectChatScreen} />
       <MainStack.Screen name="PrivacySettings" component={PrivacySettingsScreen} />
       <MainStack.Screen name="GiftCenter" component={GiftCenterScreen} />
     </MainStack.Navigator>

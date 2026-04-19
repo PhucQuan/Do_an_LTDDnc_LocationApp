@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Check, MapPin, MessageCircle, Plus, UserPlus, Users, X, Zap } from 'lucide-react-native';
+import { Check, MapPin, Plus, UserPlus, Users, X, Zap } from 'lucide-react-native';
 import { collection, doc, getDoc, onSnapshot, query, where } from 'firebase/firestore';
 import { auth, db } from '../../../infrastructure/firebase/firebase';
 import { friendService } from '../../../infrastructure/firebase/friendService';
@@ -263,28 +263,14 @@ export default function FriendsListScreen({ navigation }) {
                   user={friend}
                   rightNode={
                     <View style={styles.friendActions}>
-                      {/* Nút dẫn đến map */}
                       <TouchableOpacity
                         style={[styles.pill, friend.isGhostMode && styles.pillGhost]}
-                        onPress={() => navigation.navigate('MainTabs', { screen: 'Map', params: { focusUid: friend.uid } })}
+                        onPress={() => navigation.navigate('Map', { focusUid: friend.uid })}
                       >
                         <MapPin size={13} color={friend.isGhostMode ? COLORS.textMuted : COLORS.accent} />
                         <Text style={[styles.pillText, friend.isGhostMode && styles.pillTextGhost, { marginLeft: 4 }]}>
                           {friend.isGhostMode ? 'Hidden' : 'Live'}
                         </Text>
-                      </TouchableOpacity>
-                      {/* Nút chat */}
-                      <TouchableOpacity
-                        style={styles.chatBtn}
-                        onPress={async () => {
-                          const myUid = auth.currentUser?.uid;
-                          if (myUid) {
-                            await chatService.ensureDirectChatExists(myUid, friend.uid, friend);
-                          }
-                          navigation.navigate('DirectChat', { otherUid: friend.uid, otherName: friend.name || friend.email?.split('@')[0] });
-                        }}
-                      >
-                        <MessageCircle size={15} color={COLORS.white} />
                       </TouchableOpacity>
                     </View>
                   }
@@ -500,14 +486,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-  },
-  chatBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    backgroundColor: COLORS.ink,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   pillGhost: { backgroundColor: COLORS.bgInput },
   pillText: { color: COLORS.green, fontSize: 11, fontWeight: '900', textTransform: 'uppercase' },
