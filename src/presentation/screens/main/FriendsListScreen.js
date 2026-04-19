@@ -32,9 +32,9 @@ function StatCard({ value, label, accent = COLORS.accent }) {
   );
 }
 
-function FriendRow({ user, rightNode }) {
+function FriendRow({ user, rightNode, onPress }) {
   return (
-    <View style={styles.friendRow}>
+    <TouchableOpacity style={styles.friendRow} onPress={onPress} activeOpacity={0.7}>
       <View style={styles.avatarWrap}>
         <Image source={{ uri: getAvatarUri(user?.name) }} style={styles.avatar} />
         <View style={[styles.dot, { backgroundColor: user?.isGhostMode ? COLORS.offline : COLORS.online }]} />
@@ -48,7 +48,21 @@ function FriendRow({ user, rightNode }) {
         </Text>
       </View>
       {rightNode}
-    </View>
+    </TouchableOpacity>
+  );
+}
+
+function OnlineFriendAvatar({ user, onPress }) {
+  return (
+    <TouchableOpacity style={styles.onlineFriendItem} onPress={onPress} activeOpacity={0.8}>
+      <View style={styles.onlineAvatarWrap}>
+        <Image source={{ uri: getAvatarUri(user?.name) }} style={styles.onlineAvatar} />
+        <View style={styles.onlineDot} />
+      </View>
+      <Text style={styles.onlineFriendName} numberOfLines={1}>
+        {user?.name?.split(' ')[0] || 'Friend'}
+      </Text>
+    </TouchableOpacity>
   );
 }
 
@@ -93,7 +107,8 @@ export default function FriendsListScreen({ navigation }) {
     };
   }, []);
 
-  const onlineFriends = useMemo(() => friends.filter((f) => !f.isGhostMode).length, [friends]);
+  const onlineFriendsList = useMemo(() => friends.filter((f) => !f.isGhostMode), [friends]);
+  const onlineCount = onlineFriendsList.length;
 
   const handleAccept = async (id) => {
     try {
@@ -128,6 +143,21 @@ export default function FriendsListScreen({ navigation }) {
     ]);
   };
 
+  const handleOpenChat = async (friend) => {
+    const myUid = auth.currentUser?.uid;
+    if (!myUid) return;
+
+    try {
+      await chatService.ensureDirectChatExists(myUid, friend.uid, friend);
+      navigation.navigate('DirectChat', {
+        otherUid: friend.uid,
+        otherName: friend.name || friend.email?.split('@')[0] || 'Friend',
+      });
+    } catch (e) {
+      Alert.alert('Error', 'Could not open chat.');
+    }
+  };
+
   const handleSeedDemo = async () => {
     setSeeding(true);
     try {
@@ -159,9 +189,24 @@ export default function FriendsListScreen({ navigation }) {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+        {/* New Online Friends Horizontal Section */}
+        {onlineCount > 0 && (
+          <View style={styles.onlineSection}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.onlineScroll}>
+              {onlineFriendsList.map((friend) => (
+                <OnlineFriendAvatar
+                  key={friend.uid}
+                  user={friend}
+                  onPress={() => handleOpenChat(friend)}
+                />
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
         <View style={styles.statsRow}>
           <StatCard value={friends.length} label="friends" />
-          <StatCard value={onlineFriends} label="visible now" accent={COLORS.green} />
+          <StatCard value={onlineCount} label="visible now" accent={COLORS.green} />
           <StatCard value={groups.length} label="groups" accent={COLORS.purple} />
         </View>
 
@@ -261,11 +306,15 @@ export default function FriendsListScreen({ navigation }) {
                 <FriendRow
                   key={friend.uid}
                   user={friend}
+                  onPress={() => handleOpenChat(friend)}
                   rightNode={
                     <View style={styles.friendActions}>
                       <TouchableOpacity
                         style={[styles.pill, friend.isGhostMode && styles.pillGhost]}
-                        onPress={() => navigation.navigate('Map', { focusUid: friend.uid })}
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          navigation.navigate('Map', { focusUid: friend.uid });
+                        }}
                       >
                         <MapPin size={13} color={friend.isGhostMode ? COLORS.textMuted : COLORS.accent} />
                         <Text style={[styles.pillText, friend.isGhostMode && styles.pillTextGhost, { marginLeft: 4 }]}>
@@ -326,6 +375,51 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     ...SHADOW.accent,
+  },
+  onlineSection: {
+    marginBottom: 24,
+    marginHorizontal: -16,
+  },
+  onlineScroll: {
+    paddingHorizontal: 20,
+    gap: 18,
+  },
+  onlineFriendItem: {
+    alignItems: 'center',
+    width: 64,
+  },
+  onlineAvatarWrap: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    borderWidth: 2,
+    borderColor: COLORS.white,
+    backgroundColor: '#F3F4F6',
+    padding: 2,
+    ...SHADOW.card,
+  },
+  onlineAvatar: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 28,
+  },
+  onlineDot: {
+    position: 'absolute',
+    right: 0,
+    bottom: 0,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: COLORS.online,
+    borderWidth: 3,
+    borderColor: COLORS.white,
+  },
+  onlineFriendName: {
+    marginTop: 8,
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+    textAlign: 'center',
   },
   statsRow: { flexDirection: 'row', gap: 12, marginBottom: 20 },
   statCard: {

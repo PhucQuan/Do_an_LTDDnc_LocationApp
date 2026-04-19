@@ -21,6 +21,7 @@ import {
   MessageCircle,
   Navigation,
   Settings2,
+  UserPlus,
 } from 'lucide-react-native';
 import { auth, db } from '../../../infrastructure/firebase/firebase';
 import { useLocation } from '../../../core/hooks/useLocation';
@@ -87,7 +88,6 @@ export default function MapScreen({ navigation }) {
       if (user) {
         focusFriend(focusUid, user);
       }
-      // Clear param so re-entering the map doesn't re-focus
       const mapRoute = navigation.getState()?.routes?.find((r) => r.name === 'Map');
       if (mapRoute?.params?.focusUid) {
         navigation.setParams({ focusUid: undefined });
@@ -339,15 +339,12 @@ export default function MapScreen({ navigation }) {
     const { latitude, longitude } = selectedUser;
     const label = encodeURIComponent(selectedUser.displayName || 'Friend');
 
-    // Android: Google Maps
-    // iOS: Apple Maps (ua=1 forces Apple Maps on iOS, otherwise uses default)
     const url = Platform.select({
       android: `google.navigation:q=${latitude},${longitude}&labels=${label}`,
       ios: `maps://app?daddr=${latitude},${longitude}&q=${label}`,
     });
 
     Linking.openURL(url).catch(() => {
-      // Fallback: open plain Google Maps web
       Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}`);
     });
   }, [selectedUser]);
@@ -490,9 +487,14 @@ export default function MapScreen({ navigation }) {
           <Text style={styles.cityTitle}>{cityName}</Text>
           <Text style={styles.citySubtitle}>Live circles, avatar pins and shared moments</Text>
         </View>
-        <TouchableOpacity style={styles.settingsButton} onPress={() => navigation.navigate('Profile')}>
-          <Settings2 color={COLORS.textPrimary} size={20} />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.navigate('AddFriend')}>
+            <UserPlus color={COLORS.textPrimary} size={20} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.navigate('Profile')}>
+            <Settings2 color={COLORS.textPrimary} size={20} />
+          </TouchableOpacity>
+        </View>
       </SafeAreaView>
 
       <View style={styles.editorialStrip}>
@@ -691,7 +693,11 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginTop: 6,
   },
-  settingsButton: {
+  headerActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  headerBtn: {
     width: 52,
     height: 52,
     borderRadius: 20,

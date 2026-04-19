@@ -17,6 +17,7 @@ import ProfileScreen from '../screens/main/ProfileScreen';
 import AddFriendScreen from '../screens/main/AddFriendScreen';
 import CreateGroupScreen from '../screens/main/CreateGroupScreen';
 import GroupChatScreen from '../screens/main/GroupChatScreen';
+import DirectChatScreen from '../screens/main/DirectChatScreen';
 import PrivacySettingsScreen from '../screens/main/PrivacySettingsScreen';
 import GiftCenterScreen from '../screens/main/GiftCenterScreen';
 import { COLORS, SHADOW } from '../theme';
@@ -124,6 +125,7 @@ function AuthenticatedStack() {
       <MainStack.Screen name="AddFriend" component={AddFriendScreen} />
       <MainStack.Screen name="CreateGroup" component={CreateGroupScreen} />
       <MainStack.Screen name="GroupChat" component={GroupChatScreen} />
+      <MainStack.Screen name="DirectChat" component={DirectChatScreen} />
       <MainStack.Screen name="PrivacySettings" component={PrivacySettingsScreen} />
       <MainStack.Screen name="GiftCenter" component={GiftCenterScreen} />
     </MainStack.Navigator>
