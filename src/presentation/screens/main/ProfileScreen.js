@@ -9,8 +9,9 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Gift, LogOut, MapPin, MessageCircle, Shield, Users } from 'lucide-react-native';
+import { Camera, Gift, LogOut, MapPin, Shield, Users } from 'lucide-react-native';
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
 import { auth, db } from '../../../infrastructure/firebase/firebase';
 import { authService } from '../../../infrastructure/firebase/authService';
@@ -38,33 +39,34 @@ export default function ProfileScreen({ navigation }) {
   const [profile, setProfile] = useState(null);
   const [stats, setStats] = useState({ groups: 0, friends: 0, trails: 0 });
   const [loggingOut, setLoggingOut] = useState(false);
+  const [updatingAvatar, setUpdatingAvatar] = useState(false);
+
+  const loadProfile = async () => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+
+    const userDoc = await getDoc(doc(db, 'users', uid));
+    if (userDoc.exists()) {
+      setProfile(userDoc.data());
+    }
+
+    const groupsSnapshot = await getDocs(query(collection(db, 'groups'), where('members', 'array-contains', uid)));
+    const friendshipsSnapshot = await getDocs(query(collection(db, 'friendships'), where('status', '==', 'accepted')));
+    const trailsSnapshot = await getDocs(query(collection(db, 'locations_history'), where('uid', '==', uid)));
+
+    const friendCount = friendshipsSnapshot.docs.filter((entry) => {
+      const data = entry.data();
+      return data.userId1 === uid || data.userId2 === uid;
+    }).length;
+
+    setStats({
+      groups: groupsSnapshot.size,
+      friends: friendCount,
+      trails: trailsSnapshot.size,
+    });
+  };
 
   useEffect(() => {
-    const loadProfile = async () => {
-      const uid = auth.currentUser?.uid;
-      if (!uid) return;
-
-      const userDoc = await getDoc(doc(db, 'users', uid));
-      if (userDoc.exists()) {
-        setProfile(userDoc.data());
-      }
-
-      const groupsSnapshot = await getDocs(query(collection(db, 'groups'), where('members', 'array-contains', uid)));
-      const friendshipsSnapshot = await getDocs(query(collection(db, 'friendships'), where('status', '==', 'accepted')));
-      const trailsSnapshot = await getDocs(query(collection(db, 'locations_history'), where('uid', '==', uid)));
-
-      const friendCount = friendshipsSnapshot.docs.filter((entry) => {
-        const data = entry.data();
-        return data.userId1 === uid || data.userId2 === uid;
-      }).length;
-
-      setStats({
-        groups: groupsSnapshot.size,
-        friends: friendCount,
-        trails: trailsSnapshot.size,
-      });
-    };
-
     loadProfile();
   }, []);
 
@@ -96,6 +98,46 @@ export default function ProfileScreen({ navigation }) {
     ]);
   };
 
+  const handleUpdateAvatar = async () => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (permission.status !== 'granted') {
+        Alert.alert('Permission needed', 'Please allow photo access to change your avatar.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.5,
+        base64: true,
+      });
+
+      if (result.canceled || !result.assets?.[0]) return;
+
+      setUpdatingAvatar(true);
+      const imageUri = `data:image/jpeg;base64,${result.assets[0].base64}`;
+      const uid = auth.currentUser?.uid;
+
+      // Cập nhật profile thông qua service
+      const userRef = doc(db, 'users', uid);
+      const { updateDoc, serverTimestamp } = await import('firebase/firestore');
+      await updateDoc(userRef, {
+        avatarUrl: imageUri,
+        updatedAt: serverTimestamp(),
+      });
+
+      setProfile((prev) => ({ ...prev, avatarUrl: imageUri }));
+      Alert.alert('Success', 'Avatar updated successfully!');
+    } catch (error) {
+      Alert.alert('Error', 'Could not update avatar.');
+      console.error(error);
+    } finally {
+      setUpdatingAvatar(false);
+    }
+  };
+
   const handleQuickGhost = async () => {
     try {
       const nextValue = !profile?.isGhostMode;
@@ -125,7 +167,25 @@ export default function ProfileScreen({ navigation }) {
               <Text style={styles.name}>{currentName}</Text>
               <Text style={styles.email}>{profile?.email || auth.currentUser?.email}</Text>
             </View>
-            <Image source={{ uri: getAvatarUri(profile, currentName) }} style={styles.avatarImage} />
+
+            <TouchableOpacity
+              style={styles.avatarContainer}
+              onPress={handleUpdateAvatar}
+              disabled={updatingAvatar}
+            >
+              {updatingAvatar ? (
+                <View style={[styles.avatarImage, styles.avatarLoading]}>
+                  <ActivityIndicator color={COLORS.accent} />
+                </View>
+              ) : (
+                <View>
+                  <Image source={{ uri: getAvatarUri(profile, currentName) }} style={styles.avatarImage} />
+                  <View style={styles.cameraIconBadge}>
+                    <Camera color={COLORS.white} size={14} />
+                  </View>
+                </View>
+              )}
+            </TouchableOpacity>
           </View>
 
           <View style={styles.badgeRow}>
@@ -151,10 +211,6 @@ export default function ProfileScreen({ navigation }) {
           <TouchableOpacity style={styles.actionRow} onPress={() => navigation.navigate('Friends')}>
             <Users color={COLORS.textPrimary} size={18} />
             <Text style={styles.actionText}>Open friends</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionRow} onPress={() => navigation.navigate('Chats')}>
-            <MessageCircle color={COLORS.textPrimary} size={18} />
-            <Text style={styles.actionText}>Open chats</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.actionRow} onPress={() => navigation.navigate('CreateGroup')}>
             <Users color={COLORS.textPrimary} size={18} />
@@ -186,14 +242,6 @@ export default function ProfileScreen({ navigation }) {
               </Text>
             </View>
           </TouchableOpacity>
-        </View>
-
-        <View style={styles.panel}>
-          <Text style={styles.panelTitle}>Demo notes</Text>
-          <Text style={styles.panelText}>
-            To show yourself on screen for friends, keep location permission on, add friends, then use
-            the map tab. Your avatar ring is the main live marker. Share a moment for extra visual flair.
-          </Text>
         </View>
 
         <TouchableOpacity style={[styles.logoutButton, loggingOut && styles.logoutButtonLoading]} onPress={handleLogout} disabled={loggingOut}>
@@ -250,6 +298,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 6,
   },
+  avatarContainer: {
+    position: 'relative',
+  },
   avatarImage: {
     width: 88,
     height: 88,
@@ -257,6 +308,25 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white,
     borderWidth: 3,
     borderColor: 'rgba(255,255,255,0.9)',
+  },
+  avatarLoading: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.5)',
+  },
+  cameraIconBadge: {
+    position: 'absolute',
+    bottom: -4,
+    right: -4,
+    backgroundColor: COLORS.accent,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: COLORS.white,
+    ...SHADOW.accent,
   },
   badgeRow: {
     flexDirection: 'row',
