@@ -1,5 +1,5 @@
 import { auth, db, rtdb } from './firebase';
-import { ref, set, onValue, off } from 'firebase/database';
+import { ref, set, get, onValue, off } from 'firebase/database';
 import {
   Timestamp,
   addDoc,
@@ -436,6 +436,36 @@ class LocationService {
 
       callback(Object.values(polylinesByUser));
     });
+  }
+
+  clearCache() {
+    this._cachedProfile = null;
+  }
+
+  // Update avatarUrl in RTDB without needing new coordinates
+  async updateMyAvatar(avatarUrl) {
+    try {
+      const uid = auth.currentUser?.uid;
+      if (!uid) return;
+
+      const userRef = ref(rtdb, `locations/${uid}`);
+
+      // Write directly — if existing data needed, use a quick snapshot
+      const snapshot = await Promise.race([
+        get(userRef),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000)),
+      ]);
+      const existingData = snapshot?.val() || {};
+
+      await set(userRef, {
+        ...existingData,
+        avatarUrl,
+        updatedAt: Date.now(),
+      });
+    } catch (error) {
+      // RTDB might not be configured — skip silently, avatar still saved in Firestore
+      console.warn('[locationService] updateMyAvatar skipped:', error.message);
+    }
   }
 
   async clearMyLocation() {

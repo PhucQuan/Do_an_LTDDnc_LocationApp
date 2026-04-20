@@ -79,9 +79,9 @@ export default function ChatListScreen({ navigation }) {
       );
     }
 
-    // Direct chat
+    // Direct chat — always look up the OTHER member's name from memberNames
     const otherMemberId = item.members?.find((m) => m !== myUid) ?? item.id.split('_').find((p) => p !== myUid);
-    const otherName = item.otherName || item.memberNames?.[otherMemberId] || 'Friend';
+    const otherName = item.memberNames?.[otherMemberId] || 'Friend';
     return (
       <TouchableOpacity
         style={styles.roomCard}
