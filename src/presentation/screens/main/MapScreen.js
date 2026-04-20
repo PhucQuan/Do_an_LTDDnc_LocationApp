@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   Alert,
   Animated,
+  Image,
   Linking,
   Platform,
   StyleSheet,
@@ -104,32 +106,35 @@ export default function MapScreen({ navigation }) {
     auth.currentUser?.email?.split('@')[0] ||
     'You';
   const currentAvatar = currentProfile?.avatarUrl || auth.currentUser?.photoURL || null;
+  console.log('[Map] rendering at:', coords?.latitude, coords?.longitude, '| isLoading:', isLoading, '| avatar:', !!currentAvatar);
 
-  useEffect(() => {
-    const loadProfile = async () => {
-      const uid = auth.currentUser?.uid;
-      if (!uid) return;
+  useFocusEffect(
+    useCallback(() => {
+      const loadProfile = async () => {
+        const uid = auth.currentUser?.uid;
+        if (!uid) return;
 
-      const userSnapshot = await getDoc(doc(db, 'users', uid));
-      if (userSnapshot.exists()) {
-        setCurrentProfile(userSnapshot.data());
-      }
+        const userSnapshot = await getDoc(doc(db, 'users', uid));
+        if (userSnapshot.exists()) {
+          setCurrentProfile(userSnapshot.data());
+        }
 
-      const friendshipsSnapshot = await getDocs(
-        query(collection(db, 'friendships'), where('status', '==', 'accepted'))
-      );
+        const friendshipsSnapshot = await getDocs(
+          query(collection(db, 'friendships'), where('status', '==', 'accepted'))
+        );
 
-      const totalFriends = friendshipsSnapshot.docs.filter((entry) => {
-        const data = entry.data();
-        return data.userId1 === uid || data.userId2 === uid;
-      }).length;
+        const totalFriends = friendshipsSnapshot.docs.filter((entry) => {
+          const data = entry.data();
+          return data.userId1 === uid || data.userId2 === uid;
+        }).length;
 
-      setFriendCount(totalFriends);
-      await locationService.syncLocationVisibility().catch(() => {});
-    };
+        setFriendCount(totalFriends);
+        await locationService.syncLocationVisibility().catch(() => {});
+      };
 
-    loadProfile();
-  }, []);
+      loadProfile();
+    }, [])
+  );
 
   useEffect(() => {
     if (!coords) return;
@@ -365,17 +370,29 @@ export default function MapScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <MapView
+      {/* Loading screen while getting location */}
+      {isLoading && (
+        <View style={styles.loadingScreen}>
+          <View style={styles.loadingIconWrap}>
+            <Navigation size={32} color={COLORS.white} />
+          </View>
+          <Text style={styles.loadingTitle}>Getting your location...</Text>
+          <Text style={styles.loadingHint}>{errorMsg || 'Please wait'}</Text>
+        </View>
+      )}
+
+      {!isLoading && (
+        <MapView
         ref={mapRef}
         style={StyleSheet.absoluteFill}
         provider={PROVIDER_DEFAULT}
         initialRegion={{
-          latitude: coords.latitude,
-          longitude: coords.longitude,
+          latitude: coords?.latitude ?? 21.0285,
+          longitude: coords?.longitude ?? 105.8542,
           latitudeDelta: 0.012,
           longitudeDelta: 0.012,
         }}
-        showsUserLocation={false}
+        showsUserLocation={true}
         showsCompass={false}
         showsMyLocationButton={false}
         onPress={() => {
@@ -385,7 +402,7 @@ export default function MapScreen({ navigation }) {
         }}
       >
         <Marker
-          coordinate={{ latitude: coords.latitude, longitude: coords.longitude }}
+          coordinate={{ latitude: coords?.latitude ?? 21.0285, longitude: coords?.longitude ?? 105.8542 }}
           anchor={{ x: 0.5, y: 0.5 }}
           tracksViewChanges={false}
           zIndex={1000}
@@ -396,16 +413,24 @@ export default function MapScreen({ navigation }) {
             setFollowCurrentUser(true);
           }}
         >
-          <SocialMapMarker
-            name={currentName}
-            avatarUrl={currentAvatar}
-            speedKmh={location?.meta?.speedKmh}
-            batteryLevel={location?.meta?.batteryLevel}
-            lastUpdatedAt={Date.now()}
-            bubbleAccent={[COLORS.me, COLORS.accent, COLORS.purple]}
-            showSpeed
-            isMe
-          />
+          {/* Always-visible marker: blue dot + ring + avatar or initials */}
+          <View style={styles.myLocationWrap}>
+            <View style={styles.myLocationDot} />
+            <View style={styles.myLocationRing} />
+            {currentAvatar ? (
+              <Image
+                source={{ uri: currentAvatar }}
+                style={styles.myAvatarOnMap}
+                resizeMode="cover"
+              />
+            ) : (
+              <View style={styles.myInitialsOnMap}>
+                <Text style={styles.myInitialsText}>
+                  {currentName ? currentName.slice(0, 1).toUpperCase() : '?'}
+                </Text>
+              </View>
+            )}
+          </View>
         </Marker>
 
         {showFootprints
@@ -474,6 +499,7 @@ export default function MapScreen({ navigation }) {
           );
         })}
       </MapView>
+      )}
 
       <LinearGradient
         colors={['rgba(255,255,255,0.88)', 'rgba(255,255,255,0.15)', 'rgba(255,255,255,0)']}
@@ -914,5 +940,52 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginTop: 8,
     textAlign: 'center',
+  },
+  // ── My location marker ──────────────────────────────────────
+  myLocationWrap: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  myLocationDot: {
+    position: 'absolute',
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: COLORS.me,
+  },
+  myLocationRing: {
+    position: 'absolute',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 3,
+    borderColor: COLORS.me,
+    opacity: 0.35,
+  },
+  myAvatarOnMap: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 3,
+    borderColor: COLORS.white,
+    position: 'absolute',
+  },
+  myInitialsOnMap: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: COLORS.me,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: COLORS.white,
+    position: 'absolute',
+  },
+  myInitialsText: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontWeight: '900',
   },
 });

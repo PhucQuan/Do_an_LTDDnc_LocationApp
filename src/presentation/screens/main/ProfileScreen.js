@@ -10,9 +10,10 @@ import {
   View,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system/legacy';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Camera, Gift, LogOut, MapPin, Shield, Users } from 'lucide-react-native';
-import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
+import { Camera, Gift, LogOut, MapPin, MessageCircle, Shield, Users } from 'lucide-react-native';
+import { collection, doc, getDoc, getDocs, query, updateDoc, where } from 'firebase/firestore';
 import { auth, db } from '../../../infrastructure/firebase/firebase';
 import { authService } from '../../../infrastructure/firebase/authService';
 import { locationService } from '../../../infrastructure/firebase/locationService';
@@ -98,46 +99,66 @@ export default function ProfileScreen({ navigation }) {
     ]);
   };
 
-  const handleUpdateAvatar = async () => {
+  const handleChangeAvatar = async (source) => {
     try {
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const permission =
+        source === 'camera'
+          ? await ImagePicker.requestCameraPermissionsAsync()
+          : await ImagePicker.requestMediaLibraryPermissionsAsync();
+
       if (permission.status !== 'granted') {
-        Alert.alert('Permission needed', 'Please allow photo access to change your avatar.');
+        Alert.alert('Permission required', 'Please allow photo access to change your avatar.');
         return;
       }
 
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.5,
-        base64: true,
-      });
+      const result =
+        source === 'camera'
+          ? await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.7 })
+          : await ImagePicker.launchImageLibraryAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.7 });
 
-      if (result.canceled || !result.assets?.[0]) return;
+      if (result.canceled || !result.assets?.[0]?.uri) return;
 
       setUpdatingAvatar(true);
-      const imageUri = `data:image/jpeg;base64,${result.assets[0].base64}`;
-      const uid = auth.currentUser?.uid;
 
-      // Cập nhật profile thông qua service
-      const userRef = doc(db, 'users', uid);
-      const { updateDoc, serverTimestamp } = await import('firebase/firestore');
-      await updateDoc(userRef, {
-        avatarUrl: imageUri,
-        updatedAt: serverTimestamp(),
+      // Convert image to base64 (quality 0.3 from ImagePicker keeps base64 small)
+      const base64 = await FileSystem.readAsStringAsync(result.assets[0].uri, {
+        encoding: 'base64',
       });
 
-      setProfile((prev) => ({ ...prev, avatarUrl: imageUri }));
-      Alert.alert('Success', 'Avatar updated successfully!');
-    } catch (error) {
-      Alert.alert('Error', 'Could not update avatar.');
-      console.error(error);
+      const uid = auth.currentUser?.uid;
+      if (!uid) {
+        setUpdatingAvatar(false);
+        return;
+      }
+
+      // Save base64 as avatarUrl in Firestore user document
+      const avatarUrl = `data:image/jpeg;base64,${base64}`;
+      await updateDoc(doc(db, 'users', uid), { avatarUrl });
+
+      // Update local state so profile screen shows new avatar immediately
+      setProfile((prev) => ({ ...(prev || {}), avatarUrl }));
+
+      // Update in RTDB (skip if timeout — avatar still saved in Firestore)
+      locationService.clearCache();
+      await Promise.race([
+        locationService.updateMyAvatar(avatarUrl),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('rtdb timeout')), 5000)),
+      ]).catch(() => {});
+    } catch (err) {
+      Alert.alert('Error', 'Could not update avatar. Please try again.');
+      console.error('[Profile] Avatar update error:', err);
     } finally {
       setUpdatingAvatar(false);
     }
   };
 
+  const openAvatarPicker = () => {
+    Alert.alert('Change avatar', 'Choose how to set your photo.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Take photo', onPress: () => handleChangeAvatar('camera') },
+      { text: 'Choose from library', onPress: () => handleChangeAvatar('library') },
+    ]);
+  };
   const handleQuickGhost = async () => {
     try {
       const nextValue = !profile?.isGhostMode;
@@ -167,22 +188,19 @@ export default function ProfileScreen({ navigation }) {
               <Text style={styles.name}>{currentName}</Text>
               <Text style={styles.email}>{profile?.email || auth.currentUser?.email}</Text>
             </View>
-
             <TouchableOpacity
               style={styles.avatarContainer}
-              onPress={handleUpdateAvatar}
               disabled={updatingAvatar}
+              onPress={openAvatarPicker}
+              activeOpacity={0.75}
             >
-              {updatingAvatar ? (
-                <View style={[styles.avatarImage, styles.avatarLoading]}>
-                  <ActivityIndicator color={COLORS.accent} />
-                </View>
-              ) : (
-                <View>
-                  <Image source={{ uri: getAvatarUri(profile, currentName) }} style={styles.avatarImage} />
-                  <View style={styles.cameraIconBadge}>
-                    <Camera color={COLORS.white} size={14} />
-                  </View>
+              <Image source={{ uri: getAvatarUri(profile, currentName) }} style={styles.avatarImage} />
+              <View style={styles.cameraIconBadge}>
+                <Camera color={COLORS.white} size={14} />
+              </View>
+              {updatingAvatar && (
+                <View style={styles.avatarOverlay}>
+                  <ActivityIndicator color={COLORS.white} />
                 </View>
               )}
             </TouchableOpacity>
@@ -309,11 +327,6 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: 'rgba(255,255,255,0.9)',
   },
-  avatarLoading: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.5)',
-  },
   cameraIconBadge: {
     position: 'absolute',
     bottom: -4,
@@ -327,6 +340,17 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: COLORS.white,
     ...SHADOW.accent,
+  },
+  avatarOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 30,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   badgeRow: {
     flexDirection: 'row',
