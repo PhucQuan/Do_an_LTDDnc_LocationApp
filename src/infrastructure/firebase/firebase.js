@@ -1,7 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { getDatabase } from "firebase/database";
-import { getStorage } from "firebase/storage";
 import {
   initializeAuth,
   getReactNativePersistence
@@ -37,8 +36,5 @@ export const db = getFirestore(app);
 
 // Initialize Realtime Database
 export const rtdb = getDatabase(app);
-
-// Initialize Storage
-export const storage = getStorage(app);
 
 export default app;

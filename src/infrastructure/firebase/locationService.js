@@ -210,6 +210,8 @@ class LocationService {
   }
 
   async pushLocation(location) {
+    if (!auth.currentUser?.uid) return false;
+
     try {
       const coords = normalizeCoords(location?.coords ?? location);
       if (!coords) {
@@ -227,6 +229,10 @@ class LocationService {
         return false;
       }
 
+      const userRef = await this._getUserRef();
+      const existingSnapshot = await get(userRef).catch(() => null);
+      const existingRealtimeState = existingSnapshot?.val?.() || {};
+
       const now = Date.now();
       if (coords.speed < 0.25) {
         if (!this._lastStationaryAt) {
@@ -239,6 +245,7 @@ class LocationService {
       const statusInfo = getStatusFromSpeed(coords.speed, this._lastStationaryAt);
 
       const realtimePayload = {
+        ...existingRealtimeState,
         ...coords,
         uid: currentUser.uid,
         displayName: currentUser.displayName,
@@ -273,13 +280,13 @@ class LocationService {
       });
       realtimePayload.overrides = overrides;
 
-      await set(await this._getUserRef(), realtimePayload);
+      await set(userRef, realtimePayload);
       this._lastPushedPayload = coords;
       this._lastPushAt = now;
       this.bufferHistoryPoint(location);
       return true;
     } catch (error) {
-      console.error('[locationService] Loi push vi tri:', error.message);
+      console.warn('[locationService] Loi push vi tri:', error.message);
       return false;
     }
   }
@@ -311,6 +318,8 @@ class LocationService {
   }
 
   async flushHistoryBuffer() {
+    if (!auth.currentUser?.uid) return;
+
     if (this._flushTimer) {
       clearTimeout(this._flushTimer);
       this._flushTimer = null;
@@ -442,6 +451,15 @@ class LocationService {
     this._cachedProfile = null;
   }
 
+  async getMyRealtimeState() {
+    try {
+      const snapshot = await get(await this._getUserRef());
+      return snapshot.val() || null;
+    } catch (error) {
+      return null;
+    }
+  }
+
   // Update avatarUrl in RTDB without needing new coordinates
   async updateMyAvatar(avatarUrl) {
     try {
@@ -465,6 +483,41 @@ class LocationService {
     } catch (error) {
       // RTDB might not be configured — skip silently, avatar still saved in Firestore
       console.warn('[locationService] updateMyAvatar skipped:', error.message);
+    }
+  }
+
+  /**
+   * Đặt Note (trạng thái suy nghĩ hiện tại) của người dùng lên RTDB.
+   * Note tự hết hạn sau 24h (client-side filter).
+   * @param {string|null} noteText - Nội dung note, null để xoá note
+   */
+  async setNote(noteText) {
+    try {
+      const uid = auth.currentUser?.uid;
+      if (!uid) return;
+
+      const userRef = ref(rtdb, `locations/${uid}`);
+      const currentUser = await this._getCurrentUser();
+      const snapshot = await Promise.race([
+        get(userRef),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000)),
+      ]);
+      const existingData = snapshot?.val() || {};
+
+      await set(userRef, {
+        ...existingData,
+        uid,
+        displayName: existingData.displayName || currentUser.displayName,
+        initials: existingData.initials || currentUser.initials,
+        avatarUrl: existingData.avatarUrl || currentUser.avatarUrl,
+        latitude: existingData.latitude ?? this._lastPushedPayload?.latitude ?? null,
+        longitude: existingData.longitude ?? this._lastPushedPayload?.longitude ?? null,
+        note: noteText || null,
+        noteAt: noteText ? Date.now() : null,
+        updatedAt: Date.now(),
+      });
+    } catch (error) {
+      console.warn('[locationService] setNote skipped:', error.message);
     }
   }
 

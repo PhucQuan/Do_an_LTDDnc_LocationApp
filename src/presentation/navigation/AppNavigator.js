@@ -20,6 +20,8 @@ import GroupChatScreen from '../screens/main/GroupChatScreen';
 import DirectChatScreen from '../screens/main/DirectChatScreen';
 import PrivacySettingsScreen from '../screens/main/PrivacySettingsScreen';
 import GiftCenterScreen from '../screens/main/GiftCenterScreen';
+import ChatListScreen from '../screens/main/ChatListScreen';
+import FriendProfileScreen from '../screens/main/FriendProfileScreen';
 import { COLORS, SHADOW } from '../theme';
 
 const RootStack = createNativeStackNavigator();
@@ -128,6 +130,8 @@ function AuthenticatedStack() {
       <MainStack.Screen name="DirectChat" component={DirectChatScreen} />
       <MainStack.Screen name="PrivacySettings" component={PrivacySettingsScreen} />
       <MainStack.Screen name="GiftCenter" component={GiftCenterScreen} />
+      <MainStack.Screen name="Chats" component={ChatListScreen} />
+      <MainStack.Screen name="FriendProfile" component={FriendProfileScreen} />
     </MainStack.Navigator>
   );
 }

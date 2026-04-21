@@ -4,11 +4,9 @@
     "rules_version": "2",
     "service cloud.firestore": {
       "match /databases/{database}/documents": {
-        "function signedIn()": { "return request.auth != null" },
-        "function isOwner(userId)": { "return signedIn() && request.auth.uid == userId" },
-        "function areFriends(userId)": {
-          "return signedIn() && exists(/databases/$(database)/documents/friendships/$(userId < request.auth.uid ? userId + '_' + request.auth.uid : request.auth.uid + '_' + userId)) && get(/databases/$(database)/documents/friendships/$(userId < request.auth.uid ? userId + '_' + request.auth.uid : request.auth.uid + '_' + userId)).data.status == 'accepted'"
-        },
+        "function signedIn()": "return request.auth != null",
+        "function isOwner(userId)": "return signedIn() && request.auth.uid == userId",
+        "function areFriends(userId)": "return signedIn() && exists(/databases/$(database)/documents/friendships/$(userId < request.auth.uid ? userId + '_' + request.auth.uid : request.auth.uid + '_' + userId)) && get(/databases/$(database)/documents/friendships/$(userId < request.auth.uid ? userId + '_' + request.auth.uid : request.auth.uid + '_' + userId)).data.status == 'accepted'",
         "match /users/{userId}": { "allow read": "if signedIn()", "allow write": "if isOwner(userId)" },
         "match /friendships/{friendshipId}": { "allow read": "if signedIn()", "allow create, update, delete": "if signedIn()" },
         "match /groups/{groupId}": { "allow read": "if signedIn()", "allow create, update": "if signedIn()", "match /messages/{messageId}": { "allow read, create": "if signedIn() && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.members" } },

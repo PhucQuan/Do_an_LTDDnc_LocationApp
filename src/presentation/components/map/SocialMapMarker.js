@@ -1,22 +1,27 @@
 import React, { memo, useEffect, useRef } from 'react';
 import { Animated, Image, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Battery, BatteryLow, BatteryMedium } from 'lucide-react-native';
-import { COLORS } from '../../theme';
+import { COLORS, SHADOW } from '../../theme';
 
-const FALLBACK_COLORS = ['#3B82F6', '#8B5CF6', '#EC4899', '#10B981', '#F59E0B', '#EF4444'];
-const AVATAR_SIZE = 64;
+const FALLBACK_COLORS = [
+  ['#60A5FA', '#3B82F6'], // blue
+  ['#A78BFA', '#8B5CF6'], // purple
+  ['#F472B6', '#EC4899'], // pink
+  ['#34D399', '#10B981'], // green
+  ['#FBBF24', '#F59E0B'], // yellow
+  ['#FB7185', '#F43F5E'], // red
+];
 
 function getInitials(name) {
   if (!name) return '?';
   const parts = name.trim().split(/\s+/);
   if (parts.length >= 2) {
-    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
   }
   return name.slice(0, 2).toUpperCase();
 }
 
-function getFallbackColor(name) {
+function getFallbackGradient(name) {
   let hash = 0;
   for (let i = 0; i < (name || '').length; i++) {
     hash = name.charCodeAt(i) + ((hash << 5) - hash);
@@ -24,220 +29,180 @@ function getFallbackColor(name) {
   return FALLBACK_COLORS[Math.abs(hash) % FALLBACK_COLORS.length];
 }
 
-function getRingColors(status, isGhostMode) {
-  if (isGhostMode) {
-    return ['#CBD5E1', '#94A3B8'];
-  }
-
-  if (status === 'offline') {
-    return ['#E2E8F0', '#CBD5E1'];
-  }
-
-  return [COLORS.green, COLORS.accent];
+function getSpeedColor(speedKmh) {
+  if (!speedKmh || speedKmh < 1) return COLORS.textMuted;
+  if (speedKmh < 10) return COLORS.green;
+  if (speedKmh < 40) return COLORS.yellow;
+  return COLORS.orange;
 }
 
-function getPresenceLabel(lastUpdatedAt) {
+function isLive(lastUpdatedAt) {
   if (!lastUpdatedAt) {
-    return 'offline';
+    return false;
   }
 
-  return Date.now() - Number(lastUpdatedAt) <= 2 * 60 * 1000 ? 'online' : 'offline';
+  return Date.now() - Number(lastUpdatedAt) <= 2 * 60 * 1000;
 }
 
-function formatStationaryTime(timestamp) {
-  if (!timestamp) return null;
-  const diffMs = Date.now() - timestamp;
-  const minutes = Math.floor(diffMs / 60000);
-
-  if (minutes < 5) return null;
-  if (minutes < 60) return `${minutes}m`;
-  return `${Math.floor(minutes / 60)}h`;
-}
-
-function BatteryIndicator({ level }) {
-  if (level == null) return null;
-
-  let Icon = Battery;
-  let color = COLORS.green;
-
-  if (level <= 20) {
-    Icon = BatteryLow;
-    color = COLORS.danger;
-  } else if (level <= 50) {
-    Icon = BatteryMedium;
-    color = COLORS.warning;
+function getActiveNote(note, noteAt) {
+  if (!note || !noteAt) {
+    return null;
   }
 
-  return (
-    <View style={styles.batteryBadge}>
-      <Icon size={12} color={color} />
-      <Text style={[styles.batteryText, { color }]}>{Math.round(level)}%</Text>
-    </View>
-  );
+  return Date.now() - Number(noteAt) < 24 * 60 * 60 * 1000 ? note : null;
 }
 
 function SocialMapMarkerComponent({
   name,
   avatarUrl,
   speedKmh = 0,
-  batteryLevel,
-  stationarySince,
-  bubbleAccent = [COLORS.accent, COLORS.purple, COLORS.pink],
+  batteryLevel = 100,
   lastUpdatedAt,
   isGhostMode = false,
-  showSpeed = true,
-  isMe = false,
   isSelected = false,
+  note = null,
+  noteAt = null,
 }) {
-  const presence = getPresenceLabel(lastUpdatedAt);
-  const isActive = presence === 'online' && !isGhostMode;
-  const pulse = useRef(new Animated.Value(0)).current;
-  const float = useRef(new Animated.Value(0)).current;
-  const stationaryText = formatStationaryTime(stationarySince);
+  const live = isLive(lastUpdatedAt) && !isGhostMode;
+  const activeNote = getActiveNote(note, noteAt);
+  const gradientColors = getFallbackGradient(name);
+  const speedColor = getSpeedColor(speedKmh);
+  const isMoving = speedKmh && speedKmh > 1;
+
+  // Pulse animation for live users
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const glowAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    const loop = Animated.loop(
-      Animated.timing(pulse, {
-        toValue: 1,
-        duration: 1600,
-        useNativeDriver: true,
-      })
-    );
+    if (live && !isGhostMode) {
+      // Pulse animation
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1.15,
+            duration: 1200,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 1200,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
 
-    if (isActive && speedKmh > 1) {
-      loop.start();
-    } else {
-      pulse.setValue(0);
-      loop.stop();
+      // Glow animation
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(glowAnim, {
+            toValue: 1,
+            duration: 1500,
+            useNativeDriver: true,
+          }),
+          Animated.timing(glowAnim, {
+            toValue: 0,
+            duration: 1500,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
     }
+  }, [live, isGhostMode, pulseAnim, glowAnim]);
 
-    return () => loop.stop();
-  }, [isActive, pulse, speedKmh]);
-
-  useEffect(() => {
-    if (!isMe) {
-      float.setValue(0);
-      return undefined;
-    }
-
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(float, {
-          toValue: 1,
-          duration: 1800,
-          useNativeDriver: true,
-        }),
-        Animated.timing(float, {
-          toValue: 0,
-          duration: 1800,
-          useNativeDriver: true,
-        }),
-      ])
-    );
-
-    loop.start();
-    return () => loop.stop();
-  }, [float, isMe]);
-
-  const pulseStyle = {
-    opacity: isActive
-      ? pulse.interpolate({
-          inputRange: [0, 1],
-          outputRange: [0.35, 0],
-        })
-      : 0,
-    transform: [
-      {
-        scale: isActive
-          ? pulse.interpolate({
-              inputRange: [0, 1],
-              outputRange: [0.8, 1.8],
-            })
-          : 0.8,
-      },
-    ],
-  };
-
-  const floatStyle = isMe
-    ? {
-        transform: [
-          {
-            translateY: float.interpolate({
-              inputRange: [0, 1],
-              outputRange: [0, -5],
-            }),
-          },
-        ],
-      }
-    : null;
+  const glowOpacity = glowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.3, 0.8],
+  });
 
   return (
-    <Animated.View style={[styles.wrap, floatStyle, isSelected && !isMe && styles.wrapSelected]}>
-      {isMe ? (
-        <View style={styles.youTag}>
-          <Text style={styles.youTagText}>YOU</Text>
+    <View style={styles.wrap}>
+      {/* Note bubble */}
+      {activeNote ? (
+        <View style={styles.noteBubble}>
+          <Text style={styles.noteText} numberOfLines={1}>
+            {activeNote}
+          </Text>
+          <View style={styles.noteTail} />
         </View>
       ) : null}
 
-      {stationaryText ? (
-        <View style={styles.stationaryTag}>
-          <Text style={styles.stationaryText}>{stationaryText}</Text>
-        </View>
-      ) : showSpeed && speedKmh >= 1 ? (
-        <View style={styles.speedTag}>
-          <Text style={styles.speedText}>{`${Math.max(Number(speedKmh || 0), 0).toFixed(0)} km/h`}</Text>
+      {/* Speed indicator */}
+      {isMoving ? (
+        <View style={[styles.speedBubble, { borderColor: speedColor }]}>
+          <Text style={[styles.speedText, { color: speedColor }]}>
+            {Math.round(speedKmh)}
+          </Text>
+          <Text style={styles.speedUnit}>km/h</Text>
         </View>
       ) : null}
 
-      <Animated.View
-        style={[
-          styles.pulse,
-          pulseStyle,
-          isMe && {
-            backgroundColor: COLORS.meGlow,
-            width: 96,
-            height: 96,
-            borderRadius: 48,
-          },
-        ]}
-      />
-      <LinearGradient
-        colors={bubbleAccent}
-        style={[
-          styles.glow,
-          !isMe && isSelected && styles.glowSelected,
-          isMe && {
-            width: 88,
-            height: 88,
-            borderRadius: 44,
-            opacity: 0.82,
-          },
-        ]}
-      />
+      {/* Glow effect for live users */}
+      {live && !isGhostMode ? (
+        <Animated.View
+          style={[
+            styles.glowRing,
+            {
+              opacity: glowOpacity,
+              transform: [{ scale: pulseAnim }],
+            },
+          ]}
+        >
+          <LinearGradient
+            colors={[gradientColors[0] + '80', gradientColors[1] + '40', 'transparent']}
+            style={styles.glowGradient}
+          />
+        </Animated.View>
+      ) : null}
 
-      <LinearGradient
-        colors={isMe ? [COLORS.white, COLORS.me] : getRingColors(presence, isGhostMode)}
-        style={[styles.ring, isMe && styles.ringMe, !isMe && isSelected && styles.ringSelected, !isMe && !isActive && styles.ringIdle]}
-      >
-        <View style={[styles.innerShell, isMe && styles.innerShellMe]}>
-          {avatarUrl ? (
-            <Image
-              source={{ uri: avatarUrl }}
-              style={[styles.image, isMe && styles.imageMe]}
-              onError={() => {}}
-            />
-          ) : (
-            <View style={[styles.initialsWrap, { backgroundColor: getFallbackColor(name) }]}>
-              <Text style={[styles.initialsText, isMe && styles.initialsTextMe]}>{getInitials(name)}</Text>
+      {/* Avatar container with gradient border */}
+      <View style={[styles.avatarContainer, isSelected && styles.avatarContainerSelected]}>
+        {live && !isGhostMode ? (
+          <LinearGradient
+            colors={gradientColors}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.gradientBorder}
+          >
+            <View style={styles.avatarInner}>
+              {avatarUrl ? (
+                <Image source={{ uri: avatarUrl }} style={styles.avatar} />
+              ) : (
+                <LinearGradient
+                  colors={gradientColors}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.fallbackAvatar}
+                >
+                  <Text style={styles.initials}>{getInitials(name)}</Text>
+                </LinearGradient>
+              )}
             </View>
-          )}
-        </View>
-      </LinearGradient>
+          </LinearGradient>
+        ) : (
+          <View style={[styles.gradientBorder, styles.offlineBorder]}>
+            <View style={styles.avatarInner}>
+              {avatarUrl ? (
+                <Image source={{ uri: avatarUrl }} style={[styles.avatar, styles.avatarGhost]} />
+              ) : (
+                <View style={[styles.fallbackAvatar, { backgroundColor: COLORS.textMuted }]}>
+                  <Text style={styles.initials}>{getInitials(name)}</Text>
+                </View>
+              )}
+            </View>
+          </View>
+        )}
 
-      {batteryLevel != null && !isGhostMode ? <BatteryIndicator level={batteryLevel} /> : null}
+        {/* Battery indicator */}
+        {batteryLevel < 20 && live ? (
+          <View style={styles.batteryBadge}>
+            <Text style={styles.batteryText}>{Math.round(batteryLevel)}%</Text>
+          </View>
+        ) : null}
+      </View>
 
-      <View style={[styles.dot, { backgroundColor: isGhostMode ? COLORS.offline : COLORS.online }]} />
-    </Animated.View>
+      {/* Status dot */}
+      <View style={[styles.statusDot, live ? styles.statusLive : styles.statusOffline]} />
+    </View>
   );
 }
 
@@ -247,174 +212,170 @@ const styles = StyleSheet.create({
   wrap: {
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 12,
+    minWidth: 90,
+    minHeight: 100,
   },
-  wrapSelected: {
-    zIndex: 20,
-  },
-  youTag: {
+  // Note bubble
+  noteBubble: {
     position: 'absolute',
     top: -28,
-    paddingHorizontal: 10,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: COLORS.ink,
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 12,
-  },
-  youTagText: {
-    color: COLORS.white,
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 0.7,
-  },
-  speedTag: {
-    position: 'absolute',
-    top: -16,
+    minWidth: 60,
+    maxWidth: 140,
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
+    paddingVertical: 7,
+    borderRadius: 16,
+    backgroundColor: COLORS.bgCard,
+    borderWidth: 1.5,
+    borderColor: COLORS.glassBorder,
     zIndex: 10,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    backgroundColor: 'rgba(15,23,42,0.86)',
-    shadowColor: COLORS.shadow,
-    shadowOpacity: 0.18,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
+    ...SHADOW.card,
   },
-  speedText: {
-    color: COLORS.white,
-    fontSize: 12,
-    fontWeight: '900',
-  },
-  stationaryTag: {
-    position: 'absolute',
-    top: -16,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 999,
-    backgroundColor: COLORS.inkSoft,
-    zIndex: 10,
-  },
-  stationaryText: {
-    color: COLORS.white,
+  noteText: {
+    color: COLORS.textPrimary,
     fontSize: 11,
     fontWeight: '800',
+    textAlign: 'center',
   },
-  batteryBadge: {
+  noteTail: {
     position: 'absolute',
-    bottom: 1,
-    backgroundColor: COLORS.white,
+    bottom: -6,
+    left: '50%',
+    marginLeft: -6,
+    width: 0,
+    height: 0,
+    borderLeftWidth: 6,
+    borderRightWidth: 6,
+    borderTopWidth: 6,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderTopColor: COLORS.bgCard,
+  },
+  // Speed bubble
+  speedBubble: {
+    position: 'absolute',
+    top: -8,
+    right: -12,
     flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    alignItems: 'baseline',
     gap: 2,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: COLORS.bg,
+    borderWidth: 2,
+    zIndex: 9,
+    ...SHADOW.card,
   },
-  batteryText: {
-    fontSize: 10,
+  speedText: {
+    fontSize: 13,
     fontWeight: '900',
+    letterSpacing: -0.5,
   },
-  pulse: {
+  speedUnit: {
+    fontSize: 8,
+    fontWeight: '800',
+    color: COLORS.textMuted,
+    textTransform: 'uppercase',
+  },
+  // Glow effect
+  glowRing: {
     position: 'absolute',
-    width: 76,
-    height: 76,
-    borderRadius: 38,
-    backgroundColor: COLORS.accentGlow,
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    zIndex: 1,
   },
-  glow: {
-    position: 'absolute',
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    opacity: 0.35,
+  glowGradient: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 35,
   },
-  glowSelected: {
-    width: 82,
-    height: 82,
-    borderRadius: 41,
-    opacity: 0.62,
+  // Avatar container
+  avatarContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    zIndex: 5,
   },
-  ring: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+  avatarContainerSelected: {
+    transform: [{ scale: 1.15 }],
+  },
+  gradientBorder: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 28,
     padding: 3,
-    shadowColor: COLORS.shadow,
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 6,
+    ...SHADOW.card,
   },
-  ringSelected: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    padding: 4,
-    shadowOpacity: 0.28,
-    shadowRadius: 14,
-    elevation: 8,
-  },
-  ringIdle: {
-    opacity: 0.82,
-  },
-  ringMe: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
-    padding: 4,
-    shadowOpacity: 0.32,
-    shadowRadius: 16,
-    elevation: 10,
-  },
-  innerShell: {
-    flex: 1,
-    borderRadius: 34,
-    backgroundColor: COLORS.white,
-    padding: 3.5,
-  },
-  innerShellMe: {
-    borderRadius: 40,
-    padding: 4,
-  },
-  image: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 31,
+  offlineBorder: {
     backgroundColor: COLORS.bgSoft,
+    borderWidth: 2,
+    borderColor: COLORS.border,
+    padding: 2,
   },
-  imageMe: {
-    borderRadius: 40,
+  avatarInner: {
+    flex: 1,
+    borderRadius: 25,
+    overflow: 'hidden',
+    backgroundColor: COLORS.bg,
   },
-  initialsWrap: {
+  avatar: {
     width: '100%',
     height: '100%',
-    borderRadius: 31,
+  },
+  avatarGhost: {
+    opacity: 0.5,
+  },
+  fallbackAvatar: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  initialsText: {
-    fontSize: 18,
-    fontWeight: '900',
+  initials: {
     color: COLORS.white,
+    fontSize: 16,
+    fontWeight: '900',
     letterSpacing: 0.5,
   },
-  initialsTextMe: {
-    fontSize: 22,
-  },
-  dot: {
+  // Battery badge
+  batteryBadge: {
     position: 'absolute',
-    right: 10,
-    bottom: 10,
-    width: 16,
-    height: 16,
+    bottom: -4,
+    right: -4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
     borderRadius: 8,
+    backgroundColor: COLORS.danger,
+    borderWidth: 2,
+    borderColor: COLORS.bg,
+    zIndex: 6,
+  },
+  batteryText: {
+    color: COLORS.white,
+    fontSize: 9,
+    fontWeight: '900',
+  },
+  // Status dot
+  statusDot: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
     borderWidth: 2.5,
-    borderColor: COLORS.white,
+    borderColor: COLORS.bg,
+    zIndex: 6,
+  },
+  statusLive: {
+    backgroundColor: COLORS.neonGreen,
+    shadowColor: COLORS.neonGreen,
+    shadowOpacity: 0.8,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 8,
+  },
+  statusOffline: {
+    backgroundColor: COLORS.offline,
   },
 });

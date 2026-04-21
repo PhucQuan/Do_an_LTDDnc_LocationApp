@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -17,7 +18,7 @@ import { collection, doc, getDoc, getDocs, query, updateDoc, where } from 'fireb
 import { auth, db } from '../../../infrastructure/firebase/firebase';
 import { authService } from '../../../infrastructure/firebase/authService';
 import { locationService } from '../../../infrastructure/firebase/locationService';
-import { COLORS, SHADOW } from '../../theme';
+import { COLORS, LAYOUT, SHADOW, SPACING } from '../../theme';
 
 function getAvatarUri(profile, currentName) {
   return (
@@ -171,7 +172,7 @@ export default function ProfileScreen({ navigation }) {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <LinearGradient colors={['#FFFFFF', '#F4F7FF']} style={StyleSheet.absoluteFill} />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.heroCard}>
@@ -268,21 +269,20 @@ export default function ProfileScreen({ navigation }) {
           ) : (
             <LogOut color={COLORS.white} size={18} />
           )}
-          <Text style={styles.logoutText}>{loggingOut ? 'Logging out…' : 'Log out'}</Text>
+          <Text style={styles.logoutText}>{loggingOut ? 'Logging out...' : 'Log out'}</Text>
         </TouchableOpacity>
 
-        <View style={{ height: 120 }} />
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: {
-    paddingTop: 56,
-    paddingHorizontal: 18,
-    paddingBottom: 32,
+    paddingTop: SPACING.lg,
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: LAYOUT.tabBarBottom + LAYOUT.tabBarHeight + SPACING.xxl,
     gap: 16,
   },
   heroCard: {

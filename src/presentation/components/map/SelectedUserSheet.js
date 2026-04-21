@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, Image, Linking, Platform, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { BatteryFull, MapPin, MessageCircle, Navigation, X } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BatteryFull, MapPin, MessageCircle, Navigation, Smile, X } from 'lucide-react-native';
 import { COLORS, SHADOW } from '../../theme';
 
 const EMOJIS = ['Hi', 'Love', 'Fire', 'Haha', 'Eyes'];
@@ -25,8 +26,10 @@ function getFallbackAvatar(name) {
   return `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'Friend')}&background=ffffff&color=1d4ed8&size=256`;
 }
 
-export function SelectedUserSheet({ user, onClose, onChat, onInteract, onNavigate }) {
+export function SelectedUserSheet({ user, onClose, onChat, onInteract, onNavigate, onSendSticker, onViewProfile, bottomOffset }) {
   const translateY = useRef(new Animated.Value(420)).current;
+  const insets = useSafeAreaInsets();
+  const sheetBottom = typeof bottomOffset === 'number' ? bottomOffset : Math.max(12, insets.bottom + 12);
 
   useEffect(() => {
     Animated.timing(translateY, {
@@ -41,14 +44,18 @@ export function SelectedUserSheet({ user, onClose, onChat, onInteract, onNavigat
   return (
     <>
       <Pressable style={styles.backdrop} onPress={onClose} />
-      <Animated.View style={[styles.sheet, { transform: [{ translateY }] }]}>
+      <Animated.View style={[styles.sheet, { bottom: sheetBottom, transform: [{ translateY }] }]}>
         <View style={styles.grabber} />
 
         <View style={styles.header}>
           <View style={styles.identityRow}>
-            <Image source={{ uri: user.avatarUrl || getFallbackAvatar(user.displayName) }} style={styles.avatar} />
+            <TouchableOpacity onPress={onViewProfile} activeOpacity={0.8}>
+              <Image source={{ uri: user.avatarUrl || getFallbackAvatar(user.displayName) }} style={styles.avatar} />
+            </TouchableOpacity>
             <View style={{ flex: 1 }}>
-              <Text style={styles.name}>{user.displayName || 'Friend'}</Text>
+              <TouchableOpacity onPress={onViewProfile} activeOpacity={0.8}>
+                <Text style={styles.name}>{user.displayName || 'Friend'}</Text>
+              </TouchableOpacity>
               <Text style={styles.handle}>
                 @{(user.displayName || 'friend').replace(/\s+/g, '').toLowerCase()}
               </Text>
@@ -78,19 +85,31 @@ export function SelectedUserSheet({ user, onClose, onChat, onInteract, onNavigat
         ) : null}
 
         <View style={styles.metricsRow}>
-          <View style={styles.metricCard}>
-            <Text style={styles.metricValue}>{Math.max(Number(user.speedKmh || 0), 0).toFixed(0)}</Text>
+          <View style={[styles.metricCard, { backgroundColor: '#F0F9FF', borderColor: '#BAE6FD' }]}>
+            <View style={styles.metricIconRow}>
+              <Navigation color="#0369A1" size={16} />
+              <Text style={[styles.metricValue, { color: '#0369A1' }]}>
+                {Math.max(Number(user.speedKmh || 0), 0).toFixed(0)}
+              </Text>
+            </View>
             <Text style={styles.metricLabel}>km/h</Text>
           </View>
-          <View style={styles.metricCard}>
+          <View style={[styles.metricCard, { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }]}>
             <View style={styles.metricIconRow}>
-              <BatteryFull color={COLORS.textPrimary} size={16} />
-              <Text style={styles.metricValue}>{Math.max(Number(user.batteryLevel || 0), 0).toFixed(0)}%</Text>
+              <BatteryFull color="#166534" size={16} />
+              <Text style={[styles.metricValue, { color: '#166534' }]}>
+                {Math.max(Number(user.batteryLevel || 0), 0).toFixed(0)}%
+              </Text>
             </View>
             <Text style={styles.metricLabel}>battery</Text>
           </View>
-          <View style={styles.metricCard}>
-            <Text style={styles.metricValue}>{formatRelativeTime(user.updatedAt)}</Text>
+          <View style={[styles.metricCard, { backgroundColor: '#FDF2F8', borderColor: '#FBCFE8' }]}>
+            <View style={styles.metricIconRow}>
+              <MapPin color="#9D174D" size={16} />
+              <Text style={[styles.metricValue, { color: '#9D174D' }]}>
+                {formatRelativeTime(user.updatedAt)}
+              </Text>
+            </View>
             <Text style={styles.metricLabel}>updated</Text>
           </View>
         </View>
@@ -98,12 +117,17 @@ export function SelectedUserSheet({ user, onClose, onChat, onInteract, onNavigat
         <View style={styles.actionRow}>
           <TouchableOpacity style={styles.chatButton} onPress={() => onChat(user)}>
             <MessageCircle color={COLORS.white} size={18} />
-            <Text style={styles.chatText}>Open chat</Text>
+            <Text style={styles.chatText}>Chat</Text>
           </TouchableOpacity>
+          {onSendSticker ? (
+            <TouchableOpacity style={styles.stickerButton} onPress={onSendSticker}>
+              <Smile color={COLORS.white} size={18} />
+              <Text style={styles.stickerText}>Sticker</Text>
+            </TouchableOpacity>
+          ) : null}
           {onNavigate ? (
             <TouchableOpacity style={styles.navigateButton} onPress={onNavigate}>
               <Navigation color={COLORS.white} size={18} />
-              <Text style={styles.navigateText}>Directions</Text>
             </TouchableOpacity>
           ) : null}
         </View>
@@ -201,11 +225,12 @@ const styles = StyleSheet.create({
   },
   metricCard: {
     flex: 1,
-    minHeight: 76,
-    borderRadius: 20,
-    backgroundColor: COLORS.bgInput,
+    minHeight: 80,
+    borderRadius: 22,
+    borderWidth: 1.5,
     padding: 12,
     justifyContent: 'space-between',
+    ...SHADOW.card,
   },
   metricIconRow: {
     flexDirection: 'row',
@@ -231,9 +256,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
+    gap: 8,
   },
   chatText: {
+    color: COLORS.white,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  stickerButton: {
+    flex: 1,
+    minHeight: 54,
+    borderRadius: 20,
+    backgroundColor: COLORS.accent,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  stickerText: {
     color: COLORS.white,
     fontSize: 15,
     fontWeight: '900',
@@ -245,17 +285,10 @@ const styles = StyleSheet.create({
   },
   navigateButton: {
     minHeight: 54,
+    width: 54,
     borderRadius: 20,
-    backgroundColor: COLORS.accent,
-    flexDirection: 'row',
+    backgroundColor: COLORS.pink,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    paddingHorizontal: 18,
-  },
-  navigateText: {
-    color: COLORS.white,
-    fontSize: 15,
-    fontWeight: '900',
   },
 });

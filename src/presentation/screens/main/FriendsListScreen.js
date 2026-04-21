@@ -17,7 +17,7 @@ import { auth, db } from '../../../infrastructure/firebase/firebase';
 import { friendService } from '../../../infrastructure/firebase/friendService';
 import { chatService } from '../../../infrastructure/firebase/chatService';
 import { seedDemoSocialData } from '../../../seedData';
-import { COLORS, SHADOW } from '../../theme';
+import { COLORS, LAYOUT, SHADOW, SPACING } from '../../theme';
 
 function getAvatarUri(name) {
   return `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'B')}&background=ffffff&color=2563eb&bold=true&size=256`;
@@ -331,7 +331,6 @@ export default function FriendsListScreen({ navigation }) {
           </View>
         </View>
 
-        <View style={{ height: 120 }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -339,7 +338,10 @@ export default function FriendsListScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
-  scroll: { paddingHorizontal: 16, paddingBottom: 40 },
+  scroll: {
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: LAYOUT.tabBarBottom + LAYOUT.tabBarHeight + SPACING.xxl,
+  },
   header: {
     paddingHorizontal: 20,
     paddingTop: 12,
