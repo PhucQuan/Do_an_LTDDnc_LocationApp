@@ -1,19 +1,19 @@
-import React, { memo, useEffect, useRef } from 'react';
-import { Animated, Image, StyleSheet, Text, View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { COLORS, SHADOW } from '../../theme';
+import React, { memo, useEffect, useRef } from "react";
+import { Animated, Image, StyleSheet, Text, View } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { COLORS, SHADOW } from "../../theme";
 
 const FALLBACK_COLORS = [
-  ['#60A5FA', '#3B82F6'], // blue
-  ['#A78BFA', '#8B5CF6'], // purple
-  ['#F472B6', '#EC4899'], // pink
-  ['#34D399', '#10B981'], // green
-  ['#FBBF24', '#F59E0B'], // yellow
-  ['#FB7185', '#F43F5E'], // red
+  ["#60A5FA", "#3B82F6"], // blue
+  ["#A78BFA", "#8B5CF6"], // purple
+  ["#F472B6", "#EC4899"], // pink
+  ["#34D399", "#10B981"], // green
+  ["#FBBF24", "#F59E0B"], // yellow
+  ["#FB7185", "#F43F5E"], // red
 ];
 
 function getInitials(name) {
-  if (!name) return '?';
+  if (!name) return "?";
   const parts = name.trim().split(/\s+/);
   if (parts.length >= 2) {
     return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
@@ -23,7 +23,7 @@ function getInitials(name) {
 
 function getFallbackGradient(name) {
   let hash = 0;
-  for (let i = 0; i < (name || '').length; i++) {
+  for (let i = 0; i < (name || "").length; i++) {
     hash = name.charCodeAt(i) + ((hash << 5) - hash);
   }
   return FALLBACK_COLORS[Math.abs(hash) % FALLBACK_COLORS.length];
@@ -88,7 +88,7 @@ function SocialMapMarkerComponent({
             duration: 1200,
             useNativeDriver: true,
           }),
-        ])
+        ]),
       ).start();
 
       // Glow animation
@@ -104,7 +104,7 @@ function SocialMapMarkerComponent({
             duration: 1500,
             useNativeDriver: true,
           }),
-        ])
+        ]),
       ).start();
     }
   }, [live, isGhostMode, pulseAnim, glowAnim]);
@@ -148,14 +148,23 @@ function SocialMapMarkerComponent({
           ]}
         >
           <LinearGradient
-            colors={[gradientColors[0] + '80', gradientColors[1] + '40', 'transparent']}
+            colors={[
+              gradientColors[0] + "80",
+              gradientColors[1] + "40",
+              "transparent",
+            ]}
             style={styles.glowGradient}
           />
         </Animated.View>
       ) : null}
 
       {/* Avatar container with gradient border */}
-      <View style={[styles.avatarContainer, isSelected && styles.avatarContainerSelected]}>
+      <View
+        style={[
+          styles.avatarContainer,
+          isSelected && styles.avatarContainerSelected,
+        ]}
+      >
         {live && !isGhostMode ? (
           <LinearGradient
             colors={gradientColors}
@@ -182,9 +191,17 @@ function SocialMapMarkerComponent({
           <View style={[styles.gradientBorder, styles.offlineBorder]}>
             <View style={styles.avatarInner}>
               {avatarUrl ? (
-                <Image source={{ uri: avatarUrl }} style={[styles.avatar, styles.avatarGhost]} />
+                <Image
+                  source={{ uri: avatarUrl }}
+                  style={[styles.avatar, styles.avatarGhost]}
+                />
               ) : (
-                <View style={[styles.fallbackAvatar, { backgroundColor: COLORS.textMuted }]}>
+                <View
+                  style={[
+                    styles.fallbackAvatar,
+                    { backgroundColor: COLORS.textMuted },
+                  ]}
+                >
                   <Text style={styles.initials}>{getInitials(name)}</Text>
                 </View>
               )}
@@ -200,8 +217,18 @@ function SocialMapMarkerComponent({
         ) : null}
       </View>
 
+      {/* Name label */}
+      <Text style={styles.nameLabel} numberOfLines={1}>
+        {name}
+      </Text>
+
       {/* Status dot */}
-      <View style={[styles.statusDot, live ? styles.statusLive : styles.statusOffline]} />
+      <View
+        style={[
+          styles.statusDot,
+          live ? styles.statusLive : styles.statusOffline,
+        ]}
+      />
     </View>
   );
 }
@@ -210,14 +237,14 @@ export const SocialMapMarker = memo(SocialMapMarkerComponent);
 
 const styles = StyleSheet.create({
   wrap: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    minWidth: 90,
-    minHeight: 100,
+    alignItems: "center",
+    justifyContent: "center",
+    width: 100,
+    height: 145,
   },
   // Note bubble
   noteBubble: {
-    position: 'absolute',
+    position: "absolute",
     top: -28,
     minWidth: 60,
     maxWidth: 140,
@@ -233,30 +260,30 @@ const styles = StyleSheet.create({
   noteText: {
     color: COLORS.textPrimary,
     fontSize: 11,
-    fontWeight: '800',
-    textAlign: 'center',
+    fontWeight: "800",
+    textAlign: "center",
   },
   noteTail: {
-    position: 'absolute',
+    position: "absolute",
     bottom: -6,
-    left: '50%',
+    left: "50%",
     marginLeft: -6,
     width: 0,
     height: 0,
     borderLeftWidth: 6,
     borderRightWidth: 6,
     borderTopWidth: 6,
-    borderLeftColor: 'transparent',
-    borderRightColor: 'transparent',
+    borderLeftColor: "transparent",
+    borderRightColor: "transparent",
     borderTopColor: COLORS.bgCard,
   },
   // Speed bubble
   speedBubble: {
-    position: 'absolute',
+    position: "absolute",
     top: -8,
     right: -12,
-    flexDirection: 'row',
-    alignItems: 'baseline',
+    flexDirection: "row",
+    alignItems: "baseline",
     gap: 2,
     paddingHorizontal: 8,
     paddingVertical: 4,
@@ -268,26 +295,26 @@ const styles = StyleSheet.create({
   },
   speedText: {
     fontSize: 13,
-    fontWeight: '900',
+    fontWeight: "900",
     letterSpacing: -0.5,
   },
   speedUnit: {
     fontSize: 8,
-    fontWeight: '800',
+    fontWeight: "800",
     color: COLORS.textMuted,
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
   },
   // Glow effect
   glowRing: {
-    position: 'absolute',
+    position: "absolute",
     width: 70,
     height: 70,
     borderRadius: 35,
     zIndex: 1,
   },
   glowGradient: {
-    width: '100%',
-    height: '100%',
+    width: "100%",
+    height: "100%",
     borderRadius: 35,
   },
   // Avatar container
@@ -301,8 +328,8 @@ const styles = StyleSheet.create({
     transform: [{ scale: 1.15 }],
   },
   gradientBorder: {
-    width: '100%',
-    height: '100%',
+    width: "100%",
+    height: "100%",
     borderRadius: 28,
     padding: 3,
     ...SHADOW.card,
@@ -316,30 +343,30 @@ const styles = StyleSheet.create({
   avatarInner: {
     flex: 1,
     borderRadius: 25,
-    overflow: 'hidden',
+    overflow: "hidden",
     backgroundColor: COLORS.bg,
   },
   avatar: {
-    width: '100%',
-    height: '100%',
+    width: "100%",
+    height: "100%",
   },
   avatarGhost: {
     opacity: 0.5,
   },
   fallbackAvatar: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   initials: {
     color: COLORS.white,
     fontSize: 16,
-    fontWeight: '900',
+    fontWeight: "900",
     letterSpacing: 0.5,
   },
   // Battery badge
   batteryBadge: {
-    position: 'absolute',
+    position: "absolute",
     bottom: -4,
     right: -4,
     paddingHorizontal: 6,
@@ -353,11 +380,11 @@ const styles = StyleSheet.create({
   batteryText: {
     color: COLORS.white,
     fontSize: 9,
-    fontWeight: '900',
+    fontWeight: "900",
   },
   // Status dot
   statusDot: {
-    position: 'absolute',
+    position: "absolute",
     bottom: 2,
     right: 2,
     width: 14,
@@ -377,5 +404,18 @@ const styles = StyleSheet.create({
   },
   statusOffline: {
     backgroundColor: COLORS.offline,
+  },
+  // Name label
+  nameLabel: {
+    position: "absolute",
+    bottom: -24,
+    left: 0,
+    right: 0,
+    textAlign: "center",
+    color: COLORS.textPrimary,
+    fontSize: 12,
+    fontWeight: "700",
+    maxWidth: 90,
+    alignSelf: "center",
   },
 });

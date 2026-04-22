@@ -1,5 +1,5 @@
-import { auth, db, rtdb } from './firebase';
-import { ref, set, get, onValue, off } from 'firebase/database';
+import { auth, db, rtdb } from "./firebase";
+import { ref, set, get, onValue, off } from "firebase/database";
 import {
   Timestamp,
   addDoc,
@@ -12,14 +12,14 @@ import {
   query,
   setDoc,
   where,
-} from 'firebase/firestore';
+} from "firebase/firestore";
 
 const MIN_PUSH_DISTANCE_METERS = 5;
 const MAX_IDLE_PUSH_MS = 30 * 1000;
 const MIN_HISTORY_DISTANCE_METERS = 8;
 const HISTORY_FLUSH_INTERVAL_MS = 30 * 60 * 1000;
 const MAX_BUFFER_POINTS = 25;
-const HISTORY_COLLECTION = 'locations_history';
+const HISTORY_COLLECTION = "locations_history";
 const HISTORY_RETENTION_DAYS = 49;
 
 function getDistanceMeters(lat1, lon1, lat2, lon2) {
@@ -29,46 +29,50 @@ function getDistanceMeters(lat1, lon1, lat2, lon2) {
   const dLon = toRadians(lon2 - lon1);
   const a =
     Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) * Math.sin(dLon / 2) ** 2;
+    Math.cos(toRadians(lat1)) *
+      Math.cos(toRadians(lat2)) *
+      Math.sin(dLon / 2) ** 2;
 
   return earthRadius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 function getStatusFromSpeed(speed = 0, lastStationaryAt = null) {
   if (speed >= 1.6) {
-    return 'running';
+    return "running";
   }
 
   if (speed >= 0.25) {
-    return 'moving';
+    return "moving";
   }
 
-  return 'still';
+  return "still";
 }
 
-function getInitials(name = '?') {
-  return name
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? '')
-    .join('') || '?';
+function getInitials(name = "?") {
+  return (
+    name
+      .split(" ")
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? "")
+      .join("") || "?"
+  );
 }
 
 function toDayKey(inputDate) {
   const date = inputDate instanceof Date ? inputDate : new Date(inputDate);
   const year = date.getFullYear();
-  const month = `${date.getMonth() + 1}`.padStart(2, '0');
-  const day = `${date.getDate()}`.padStart(2, '0');
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
 
-function getTimeFilterRange(filterKey = 'today') {
+function getTimeFilterRange(filterKey = "today") {
   const now = new Date();
   const start = new Date(now);
   start.setHours(0, 0, 0, 0);
 
-  if (filterKey === 'yesterday') {
+  if (filterKey === "yesterday") {
     start.setDate(start.getDate() - 1);
   }
 
@@ -101,14 +105,14 @@ function normalizeCoords(coords) {
 
 function formatRelativeTime(timestamp) {
   if (!timestamp) {
-    return 'now';
+    return "now";
   }
 
   const diffMs = Date.now() - timestamp;
   const minutes = Math.max(Math.floor(diffMs / 60000), 0);
 
   if (minutes < 1) {
-    return 'now';
+    return "now";
   }
 
   if (minutes < 60) {
@@ -133,22 +137,20 @@ class LocationService {
   async _getCurrentUser() {
     const firebaseUser = auth.currentUser;
     if (!firebaseUser?.uid) {
-      throw new Error('Chua dang nhap.');
+      throw new Error("Chua dang nhap.");
     }
 
     if (!this._cachedProfile || this._cachedProfile.uid !== firebaseUser.uid) {
-      const userSnapshot = await getDoc(doc(db, 'users', firebaseUser.uid));
+      const userSnapshot = await getDoc(doc(db, "users", firebaseUser.uid));
       this._cachedProfile = {
         uid: firebaseUser.uid,
         displayName:
           userSnapshot.data()?.name ||
           firebaseUser.displayName ||
-          firebaseUser.email?.split('@')[0] ||
-          'Bạn',
+          firebaseUser.email?.split("@")[0] ||
+          "Bạn",
         avatarUrl:
-          userSnapshot.data()?.avatarUrl ||
-          firebaseUser.photoURL ||
-          null,
+          userSnapshot.data()?.avatarUrl || firebaseUser.photoURL || null,
         batteryLevel: userSnapshot.data()?.batteryLevel ?? null,
         isGhostMode: Boolean(userSnapshot.data()?.isGhostMode),
         privacyMap: userSnapshot.data()?.privacyMap || {},
@@ -158,7 +160,10 @@ class LocationService {
     return {
       ...this._cachedProfile,
       initials: getInitials(
-        this._cachedProfile.displayName || firebaseUser.displayName || firebaseUser.email || 'B'
+        this._cachedProfile.displayName ||
+          firebaseUser.displayName ||
+          firebaseUser.email ||
+          "B",
       ),
     };
   }
@@ -177,11 +182,14 @@ class LocationService {
       this._lastPushedPayload.latitude,
       this._lastPushedPayload.longitude,
       nextCoords.latitude,
-      nextCoords.longitude
+      nextCoords.longitude,
     );
 
     const idleDuration = Date.now() - this._lastPushAt;
-    return movedDistance >= MIN_PUSH_DISTANCE_METERS || idleDuration >= MAX_IDLE_PUSH_MS;
+    return (
+      movedDistance >= MIN_PUSH_DISTANCE_METERS ||
+      idleDuration >= MAX_IDLE_PUSH_MS
+    );
   }
 
   _shouldBufferHistory(nextCoords) {
@@ -193,7 +201,7 @@ class LocationService {
       this._lastBufferedPoint.latitude,
       this._lastBufferedPoint.longitude,
       nextCoords.latitude,
-      nextCoords.longitude
+      nextCoords.longitude,
     );
 
     return movedDistance >= MIN_HISTORY_DISTANCE_METERS;
@@ -242,7 +250,10 @@ class LocationService {
         this._lastStationaryAt = null;
       }
 
-      const statusInfo = getStatusFromSpeed(coords.speed, this._lastStationaryAt);
+      const statusInfo = getStatusFromSpeed(
+        coords.speed,
+        this._lastStationaryAt,
+      );
 
       const realtimePayload = {
         ...existingRealtimeState,
@@ -254,30 +265,30 @@ class LocationService {
         status: statusInfo,
         speedKmh: Number((coords.speed * 3.6).toFixed(1)),
         batteryLevel:
-          location?.meta?.batteryLevel ??
-          currentUser.batteryLevel ??
-          null,
-        stationarySince: statusInfo === 'still' ? this._lastStationaryAt : null,
+          location?.meta?.batteryLevel ?? currentUser.batteryLevel ?? null,
+        stationarySince: statusInfo === "still" ? this._lastStationaryAt : null,
         updatedAt: now,
       };
 
       const overrides = {};
-      Object.entries(currentUser.privacyMap || {}).forEach(([friendUid, setting]) => {
-        const mode = typeof setting === 'string' ? setting : setting?.mode;
-        if (mode === 'approximate') {
-          overrides[friendUid] = {
-            lat: coords.latitude + 0.003,
-            lon: coords.longitude + 0.003,
-            updatedAt: now
-          };
-        } else if (mode === 'freeze' && setting.lat) {
-          overrides[friendUid] = {
-            lat: setting.lat,
-            lon: setting.long || setting.lon,
-            updatedAt: setting.updatedAt || now
-          };
-        }
-      });
+      Object.entries(currentUser.privacyMap || {}).forEach(
+        ([friendUid, setting]) => {
+          const mode = typeof setting === "string" ? setting : setting?.mode;
+          if (mode === "approximate") {
+            overrides[friendUid] = {
+              lat: coords.latitude + 0.003,
+              lon: coords.longitude + 0.003,
+              updatedAt: now,
+            };
+          } else if (mode === "freeze" && setting.lat) {
+            overrides[friendUid] = {
+              lat: setting.lat,
+              lon: setting.long || setting.lon,
+              updatedAt: setting.updatedAt || now,
+            };
+          }
+        },
+      );
       realtimePayload.overrides = overrides;
 
       await set(userRef, realtimePayload);
@@ -286,7 +297,7 @@ class LocationService {
       this.bufferHistoryPoint(location);
       return true;
     } catch (error) {
-      console.warn('[locationService] Loi push vi tri:', error.message);
+      console.warn("[locationService] Loi push vi tri:", error.message);
       return false;
     }
   }
@@ -313,7 +324,10 @@ class LocationService {
         this.flushHistoryBuffer();
       }
     } catch (error) {
-      console.warn('[locationService] Khong the dua diem vao buffer:', error.message);
+      console.warn(
+        "[locationService] Khong the dua diem vao buffer:",
+        error.message,
+      );
     }
   }
 
@@ -353,95 +367,103 @@ class LocationService {
 
       this._historyBuffer = [];
     } catch (error) {
-      console.error('[locationService] Loi flush footprint:', error.message);
+      console.error("[locationService] Loi flush footprint:", error.message);
     }
   }
 
   subscribeToAllLocations(callback) {
-    const locationsRef = ref(rtdb, 'locations');
+    const locationsRef = ref(rtdb, "locations");
 
     const handler = (snapshot) => {
       const data = snapshot.val() || {};
       const myUid = auth.currentUser?.uid;
-      const others = Object.entries(data).reduce((accumulator, [uid, payload]) => {
-        if (!payload) return accumulator;
+      const others = Object.entries(data).reduce(
+        (accumulator, [uid, payload]) => {
+          if (!payload) return accumulator;
 
-        let finalLat = payload.latitude;
-        let finalLon = payload.longitude;
-        let finalUpdatedAt = payload.updatedAt;
+          let finalLat = payload.latitude;
+          let finalLon = payload.longitude;
+          let finalUpdatedAt = payload.updatedAt;
 
-        if (payload.overrides && payload.overrides[myUid]) {
-          finalLat = payload.overrides[myUid].lat;
-          finalLon = payload.overrides[myUid].lon;
-          finalUpdatedAt = payload.overrides[myUid].updatedAt || finalUpdatedAt;
-        }
+          if (payload.overrides && payload.overrides[myUid]) {
+            finalLat = payload.overrides[myUid].lat;
+            finalLon = payload.overrides[myUid].lon;
+            finalUpdatedAt =
+              payload.overrides[myUid].updatedAt || finalUpdatedAt;
+          }
 
-        if (
-          uid === myUid ||
-          !Number.isFinite(finalLat) ||
-          !Number.isFinite(finalLon)
-        ) {
+          if (
+            uid === myUid ||
+            !Number.isFinite(finalLat) ||
+            !Number.isFinite(finalLon)
+          ) {
+            return accumulator;
+          }
+
+          accumulator[uid] = {
+            ...payload,
+            latitude: finalLat,
+            longitude: finalLon,
+            updatedAt: finalUpdatedAt,
+            relativeTime: formatRelativeTime(finalUpdatedAt),
+          };
           return accumulator;
-        }
-
-        accumulator[uid] = {
-          ...payload,
-          latitude: finalLat,
-          longitude: finalLon,
-          updatedAt: finalUpdatedAt,
-          relativeTime: formatRelativeTime(finalUpdatedAt),
-        };
-        return accumulator;
-      }, {});
+        },
+        {},
+      );
 
       callback(others);
     };
 
     onValue(locationsRef, handler);
-    return () => off(locationsRef, 'value', handler);
+    return () => off(locationsRef, "value", handler);
   }
 
   subscribeToHistory(filterKey, callback) {
     const { start, end } = getTimeFilterRange(filterKey);
     const historyQuery = query(
       collection(db, HISTORY_COLLECTION),
-      where('startedAt', '>=', Timestamp.fromDate(start)),
-      where('startedAt', '<', Timestamp.fromDate(end)),
-      orderBy('startedAt', 'asc')
+      where("startedAt", ">=", Timestamp.fromDate(start)),
+      where("startedAt", "<", Timestamp.fromDate(end)),
+      orderBy("startedAt", "asc"),
     );
 
     return onSnapshot(historyQuery, (snapshot) => {
-      const polylinesByUser = snapshot.docs.reduce((accumulator, documentSnapshot) => {
-        const data = documentSnapshot.data();
-        const points = Array.isArray(data.points)
-          ? data.points
-              .map((point) => ({
-                latitude: point.latitude,
-                longitude: point.longitude,
-                capturedAt: point.capturedAt?.toDate?.()?.getTime?.() ?? null,
-              }))
-              .filter(
-                (point) =>
-                  Number.isFinite(point.latitude) && Number.isFinite(point.longitude)
-              )
-          : [];
+      const polylinesByUser = snapshot.docs.reduce(
+        (accumulator, documentSnapshot) => {
+          const data = documentSnapshot.data();
+          const points = Array.isArray(data.points)
+            ? data.points
+                .map((point) => ({
+                  latitude: point.latitude,
+                  longitude: point.longitude,
+                  capturedAt: point.capturedAt?.toDate?.()?.getTime?.() ?? null,
+                }))
+                .filter(
+                  (point) =>
+                    Number.isFinite(point.latitude) &&
+                    Number.isFinite(point.longitude),
+                )
+            : [];
 
-        if (!points.length) {
+          if (!points.length) {
+            return accumulator;
+          }
+
+          if (!accumulator[data.uid]) {
+            accumulator[data.uid] = {
+              uid: data.uid,
+              displayName: data.displayName || "Ban do",
+              initials: data.initials || getInitials(data.displayName || "B"),
+              coordinates: [],
+            };
+          }
+
+          accumulator[data.uid].coordinates.push(...points);
           return accumulator;
-        }
-
-        if (!accumulator[data.uid]) {
-          accumulator[data.uid] = {
-            uid: data.uid,
-            displayName: data.displayName || 'Ban do',
-            initials: data.initials || getInitials(data.displayName || 'B'),
-            coordinates: [],
-          };
-        }
-
-        accumulator[data.uid].coordinates.push(...points);
-        return accumulator;
-      }, {});
+        },
+        {},
+      );
 
       callback(Object.values(polylinesByUser));
     });
@@ -471,7 +493,9 @@ class LocationService {
       // Write directly — if existing data needed, use a quick snapshot
       const snapshot = await Promise.race([
         get(userRef),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000)),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("timeout")), 3000),
+        ),
       ]);
       const existingData = snapshot?.val() || {};
 
@@ -482,7 +506,7 @@ class LocationService {
       });
     } catch (error) {
       // RTDB might not be configured — skip silently, avatar still saved in Firestore
-      console.warn('[locationService] updateMyAvatar skipped:', error.message);
+      console.warn("[locationService] updateMyAvatar skipped:", error.message);
     }
   }
 
@@ -500,7 +524,9 @@ class LocationService {
       const currentUser = await this._getCurrentUser();
       const snapshot = await Promise.race([
         get(userRef),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000)),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("timeout")), 3000),
+        ),
       ]);
       const existingData = snapshot?.val() || {};
 
@@ -510,14 +536,16 @@ class LocationService {
         displayName: existingData.displayName || currentUser.displayName,
         initials: existingData.initials || currentUser.initials,
         avatarUrl: existingData.avatarUrl || currentUser.avatarUrl,
-        latitude: existingData.latitude ?? this._lastPushedPayload?.latitude ?? null,
-        longitude: existingData.longitude ?? this._lastPushedPayload?.longitude ?? null,
+        latitude:
+          existingData.latitude ?? this._lastPushedPayload?.latitude ?? null,
+        longitude:
+          existingData.longitude ?? this._lastPushedPayload?.longitude ?? null,
         note: noteText || null,
         noteAt: noteText ? Date.now() : null,
         updatedAt: Date.now(),
       });
     } catch (error) {
-      console.warn('[locationService] setNote skipped:', error.message);
+      console.warn("[locationService] setNote skipped:", error.message);
     }
   }
 
@@ -530,19 +558,19 @@ class LocationService {
       this._lastBufferedPoint = null;
       this._cachedProfile = null;
     } catch (error) {
-      console.warn('[locationService] Khong the xoa vi tri:', error.message);
+      console.warn("[locationService] Khong the xoa vi tri:", error.message);
     }
   }
 
   async setGhostMode(enabled) {
     const currentUser = await this._getCurrentUser();
     await setDoc(
-      doc(db, 'users', currentUser.uid),
+      doc(db, "users", currentUser.uid),
       {
         isGhostMode: enabled,
         updatedAt: new Date().toISOString(),
       },
-      { merge: true }
+      { merge: true },
     );
 
     this._cachedProfile = {
@@ -551,7 +579,16 @@ class LocationService {
     };
 
     if (enabled) {
-      await this.clearMyLocation();
+      try {
+        await this.clearMyLocation();
+        console.log("[locationService] Ghost mode enabled, location cleared");
+      } catch (error) {
+        console.error(
+          "[locationService] Error clearing location:",
+          error.message,
+        );
+        throw error;
+      }
     }
   }
 
@@ -562,10 +599,13 @@ class LocationService {
     }
 
     const acceptedFriendships = await getDocs(
-      query(collection(db, 'friendships'), where('status', '==', 'accepted'))
+      query(collection(db, "friendships"), where("status", "==", "accepted")),
     );
     const groupsSnapshot = await getDocs(
-      query(collection(db, 'groups'), where('members', 'array-contains', firebaseUser.uid))
+      query(
+        collection(db, "groups"),
+        where("members", "array-contains", firebaseUser.uid),
+      ),
     );
 
     const visibleIds = new Set([firebaseUser.uid]);
@@ -581,17 +621,19 @@ class LocationService {
     });
 
     groupsSnapshot.docs.forEach((entry) => {
-      (entry.data().members || []).forEach((memberId) => visibleIds.add(memberId));
+      (entry.data().members || []).forEach((memberId) =>
+        visibleIds.add(memberId),
+      );
     });
 
-    const currentUserSnap = await getDoc(doc(db, 'users', firebaseUser.uid));
+    const currentUserSnap = await getDoc(doc(db, "users", firebaseUser.uid));
     const privacyMap = currentUserSnap.data()?.privacyMap || {};
 
     const writes = {};
     visibleIds.forEach((visibleUid) => {
       const setting = privacyMap[visibleUid];
-      const mode = typeof setting === 'string' ? setting : setting?.mode;
-      if (mode === 'ghost') return; // Do not grant read access to Ghosted friends
+      const mode = typeof setting === "string" ? setting : setting?.mode;
+      if (mode === "ghost") return; // Do not grant read access to Ghosted friends
       writes[visibleUid] = true;
     });
 
@@ -603,15 +645,18 @@ class LocationService {
     try {
       const firebaseUser = auth.currentUser;
       if (!firebaseUser) return;
-      
-      const interactionRef = ref(rtdb, `interactions/${targetUid}/${Date.now()}`);
+
+      const interactionRef = ref(
+        rtdb,
+        `interactions/${targetUid}/${Date.now()}`,
+      );
       await set(interactionRef, {
         from: firebaseUser.uid,
         emoji: emoji,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       });
     } catch (e) {
-      console.warn('Cannot push interaction', e);
+      console.warn("Cannot push interaction", e);
     }
   }
 
@@ -620,7 +665,7 @@ class LocationService {
     if (!firebaseUser) return () => {};
 
     const interactionsRef = ref(rtdb, `interactions/${firebaseUser.uid}`);
-    
+
     const handler = (snapshot) => {
       const data = snapshot.val();
       if (data) {
@@ -632,7 +677,7 @@ class LocationService {
     };
 
     onValue(interactionsRef, handler);
-    return () => off(interactionsRef, 'value', handler);
+    return () => off(interactionsRef, "value", handler);
   }
 }
 
