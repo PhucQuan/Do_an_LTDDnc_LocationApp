@@ -1,21 +1,36 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useFocusEffect } from '@react-navigation/native';
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import {
   Alert,
   Animated,
+  FlatList,
   Image,
   Linking,
+  Modal,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
-} from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
-import MapView, { AnimatedRegion, Marker, Polyline, PROVIDER_DEFAULT } from 'react-native-maps';
-import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
-import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
+} from "react-native";
+import * as ImagePicker from "expo-image-picker";
+import MapView, {
+  AnimatedRegion,
+  Marker,
+  Polyline,
+  PROVIDER_DEFAULT,
+} from "react-native-maps";
+import { LinearGradient } from "expo-linear-gradient";
+import { BlurView } from "expo-blur";
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  where,
+} from "firebase/firestore";
 import {
   Camera,
   Gift,
@@ -24,26 +39,32 @@ import {
   Navigation,
   Settings2,
   UserPlus,
-} from 'lucide-react-native';
-import { auth, db } from '../../../infrastructure/firebase/firebase';
-import { useLocation } from '../../../core/hooks/useLocation';
-import { useVisibilityScope } from '../../../core/hooks/useVisibilityScope';
-import { locationService } from '../../../infrastructure/firebase/locationService';
-import { momentService } from '../../../infrastructure/firebase/momentService';
-import { SocialMapMarker } from '../../components/map/SocialMapMarker';
-import { SelectedUserSheet } from '../../components/map/SelectedUserSheet';
-import { MomentViewerModal } from '../../components/map/MomentViewerModal';
-import { NoteInputModal } from '../../components/map/NoteInputModal';
-import { StickerReactionPicker } from '../../components/map/StickerReactionPicker';
-import { ReactionAnimation } from '../../components/map/ReactionAnimation';
-import { GlobeView } from '../../components/map/GlobeView';
-import { useMapCamera } from '../../components/map/MapCameraController';
-import { MAP_STYLE } from '../../theme/mapStyle';
-import { useMockFriends } from '../../utils/mockFriends';
-import { COLORS, LAYOUT, SHADOW, SPACING } from '../../theme';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+} from "lucide-react-native";
+import { auth, db } from "../../../infrastructure/firebase/firebase";
+import { useLocation } from "../../../core/hooks/useLocation";
+import { useVisibilityScope } from "../../../core/hooks/useVisibilityScope";
+import { locationService } from "../../../infrastructure/firebase/locationService";
+import { momentService } from "../../../infrastructure/firebase/momentService";
+import { SocialMapMarker } from "../../components/map/SocialMapMarker";
+import { SelectedUserSheet } from "../../components/map/SelectedUserSheet";
+import { MomentViewerModal } from "../../components/map/MomentViewerModal";
+import { NoteInputModal } from "../../components/map/NoteInputModal";
+import { StickerReactionPicker } from "../../components/map/StickerReactionPicker";
+import { ReactionAnimation } from "../../components/map/ReactionAnimation";
+import { GlobeView } from "../../components/map/GlobeView";
+import { useMapCamera } from "../../components/map/MapCameraController";
+import { MAP_STYLE } from "../../theme/mapStyle";
+import { useMockFriends } from "../../utils/mockFriends";
+import { COLORS, LAYOUT, SHADOW, SPACING } from "../../theme";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-const PATH_COLORS = [COLORS.accent, COLORS.pink, COLORS.purple, COLORS.green, COLORS.yellow];
+const PATH_COLORS = [
+  COLORS.accent,
+  COLORS.pink,
+  COLORS.purple,
+  COLORS.green,
+  COLORS.yellow,
+];
 const MAX_LIVE_TRAIL_POINTS = 24;
 const FRIEND_TRAIL_DISTANCE_THRESHOLD = 0.00006;
 
@@ -51,19 +72,21 @@ function getTrailDelta(lastPoint, nextPoint) {
   if (!lastPoint || !nextPoint) {
     return Infinity;
   }
-
   return Math.max(
     Math.abs(lastPoint.latitude - nextPoint.latitude),
-    Math.abs(lastPoint.longitude - nextPoint.longitude)
+    Math.abs(lastPoint.longitude - nextPoint.longitude),
   );
 }
 
-function appendTrailPoint(existingTrail, nextPoint, threshold = FRIEND_TRAIL_DISTANCE_THRESHOLD) {
+function appendTrailPoint(
+  existingTrail,
+  nextPoint,
+  threshold = FRIEND_TRAIL_DISTANCE_THRESHOLD,
+) {
   const lastPoint = existingTrail[existingTrail.length - 1];
   if (getTrailDelta(lastPoint, nextPoint) < threshold) {
     return existingTrail;
   }
-
   return [...existingTrail, nextPoint].slice(-MAX_LIVE_TRAIL_POINTS);
 }
 
@@ -79,11 +102,9 @@ function buildAnimatedRegion(coords) {
 function getMomentCoordinates(moment) {
   const latitude = Number(moment?.location?.latitude);
   const longitude = Number(moment?.location?.longitude);
-
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
     return null;
   }
-
   return { latitude, longitude };
 }
 
@@ -98,9 +119,9 @@ export default function MapScreen({ navigation }) {
 
   const [otherUsers, setOtherUsers] = useState({});
   const [currentProfile, setCurrentProfile] = useState(null);
-  const [cityName, setCityName] = useState('Your city');
+  const [cityName, setCityName] = useState("Your city");
   const [selectedUser, setSelectedUser] = useState(null);
-  const [historyFilter, setHistoryFilter] = useState('today');
+  const [historyFilter, setHistoryFilter] = useState("today");
   const [showFootprints, setShowFootprints] = useState(true);
   const [footprints, setFootprints] = useState([]);
   const [friendCount, setFriendCount] = useState(0);
@@ -120,24 +141,27 @@ export default function MapScreen({ navigation }) {
   const [stickerTarget, setStickerTarget] = useState(null);
   const [activeReaction, setActiveReaction] = useState(null);
   const [showGlobe, setShowGlobe] = useState(false);
+  const [showMomentsSheet, setShowMomentsSheet] = useState(false);
+  const momentsSheetAnim = useRef(new Animated.Value(0)).current;
 
-  const routeParams = navigation.getState()?.routes?.find((r) => r.name === 'Map')?.params ?? {};
+  const routeParams =
+    navigation.getState()?.routes?.find((r) => r.name === "Map")?.params ?? {};
   const focusUid = routeParams?.focusUid;
 
   useEffect(() => {
     if (!focusUid) return;
-
     const timer = setTimeout(() => {
       const user = otherUsers[focusUid];
       if (user) {
         focusFriend(focusUid, user);
       }
-      const mapRoute = navigation.getState()?.routes?.find((r) => r.name === 'Map');
+      const mapRoute = navigation
+        .getState()
+        ?.routes?.find((r) => r.name === "Map");
       if (mapRoute?.params?.focusUid) {
         navigation.setParams({ focusUid: undefined });
       }
     }, 600);
-
     return () => clearTimeout(timer);
   }, [focusUid, otherUsers]);
 
@@ -145,12 +169,13 @@ export default function MapScreen({ navigation }) {
   const currentName =
     currentProfile?.name ||
     auth.currentUser?.displayName ||
-    auth.currentUser?.email?.split('@')[0] ||
-    'You';
-  const currentAvatar = currentProfile?.avatarUrl || auth.currentUser?.photoURL || null;
-
+    auth.currentUser?.email?.split("@")[0] ||
+    "You";
+  const currentAvatar =
+    currentProfile?.avatarUrl || auth.currentUser?.photoURL || null;
   const overlayTop = insets.top + SPACING.lg;
-  const overlayBottom = insets.bottom + LAYOUT.tabBarBottom + LAYOUT.tabBarHeight + SPACING.md;
+  const overlayBottom =
+    insets.bottom + LAYOUT.tabBarBottom + LAYOUT.tabBarHeight + SPACING.md;
 
   useFocusEffect(
     useCallback(() => {
@@ -158,7 +183,7 @@ export default function MapScreen({ navigation }) {
         const uid = auth.currentUser?.uid;
         if (!uid) return;
 
-        const userSnapshot = await getDoc(doc(db, 'users', uid));
+        const userSnapshot = await getDoc(doc(db, "users", uid));
         if (userSnapshot.exists()) {
           setCurrentProfile(userSnapshot.data());
         }
@@ -168,36 +193,38 @@ export default function MapScreen({ navigation }) {
         setMyNoteAt(realtimeState?.noteAt || null);
 
         const friendshipsSnapshot = await getDocs(
-          query(collection(db, 'friendships'), where('status', '==', 'accepted'))
+          query(
+            collection(db, "friendships"),
+            where("status", "==", "accepted"),
+          ),
         );
-
         const totalFriends = friendshipsSnapshot.docs.filter((entry) => {
           const data = entry.data();
           return data.userId1 === uid || data.userId2 === uid;
         }).length;
-
         setFriendCount(totalFriends);
+
         await locationService.syncLocationVisibility().catch(() => {});
       };
-
       loadProfile();
-    }, [])
+    }, []),
   );
 
   useEffect(() => {
     if (!coords) return;
-
-    import('expo-location')
+    import("expo-location")
       .then(({ reverseGeocodeAsync }) =>
         reverseGeocodeAsync({
           latitude: coords.latitude,
           longitude: coords.longitude,
-        })
+        }),
       )
       .then((results) => {
         const place = results?.[0];
         if (place) {
-          setCityName(place.city || place.district || place.region || 'Your city');
+          setCityName(
+            place.city || place.district || place.region || "Your city",
+          );
         }
       })
       .catch(() => {});
@@ -212,13 +239,11 @@ export default function MapScreen({ navigation }) {
     if (!coords) {
       return;
     }
-
     const nextPoint = {
       latitude: coords.latitude,
       longitude: coords.longitude,
       capturedAt: Date.now(),
     };
-
     setLocalTrail((currentTrail) => {
       return appendTrailPoint(currentTrail, nextPoint, 0.00008);
     });
@@ -234,7 +259,6 @@ export default function MapScreen({ navigation }) {
           if (!visibleUserIds.has(uid) || user.isGhostMode) {
             return;
           }
-
           nextUsers[uid] = previous[uid] ? { ...previous[uid], ...user } : user;
 
           const nextCoordinate = {
@@ -244,18 +268,23 @@ export default function MapScreen({ navigation }) {
 
           const existingMarker = animatedMarkersRef.current[uid];
           if (!existingMarker) {
-            animatedMarkersRef.current[uid] = buildAnimatedRegion(nextCoordinate);
+            animatedMarkersRef.current[uid] =
+              buildAnimatedRegion(nextCoordinate);
           } else {
-            existingMarker.timing({
-              ...nextCoordinate,
-              duration: 850,
-              useNativeDriver: false,
-            }).start();
+            existingMarker
+              .timing({
+                ...nextCoordinate,
+                duration: 850,
+                useNativeDriver: false,
+              })
+              .start();
           }
 
           nextTrailMap[uid] = {
-            displayName: user.displayName || 'Friend',
-            initials: user.initials || (user.displayName || 'F').slice(0, 1).toUpperCase(),
+            displayName: user.displayName || "Friend",
+            initials:
+              user.initials ||
+              (user.displayName || "F").slice(0, 1).toUpperCase(),
             nextPoint: {
               latitude: user.latitude,
               longitude: user.longitude,
@@ -266,7 +295,6 @@ export default function MapScreen({ navigation }) {
 
         setFriendTrails((previousTrails) => {
           const updatedTrails = {};
-
           Object.entries(nextTrailMap).forEach(([uid, trailMeta]) => {
             const existingTrail = previousTrails[uid]?.coordinates || [];
             updatedTrails[uid] = {
@@ -276,22 +304,22 @@ export default function MapScreen({ navigation }) {
               coordinates: appendTrailPoint(existingTrail, trailMeta.nextPoint),
             };
           });
-
           return updatedTrails;
         });
 
         return nextUsers;
       });
     });
-
     return () => unsubscribe();
   }, [visibleUserIds]);
 
   useEffect(() => {
-    const unsubscribe = locationService.subscribeToHistory(historyFilter, (paths) => {
-      setFootprints(paths.filter((path) => visibleUserIds.has(path.uid)));
-    });
-
+    const unsubscribe = locationService.subscribeToHistory(
+      historyFilter,
+      (paths) => {
+        setFootprints(paths.filter((path) => visibleUserIds.has(path.uid)));
+      },
+    );
     return () => unsubscribe();
   }, [historyFilter, visibleUserIds]);
 
@@ -299,7 +327,6 @@ export default function MapScreen({ navigation }) {
     const unsubscribe = momentService.subscribeToRecentMoments((items) => {
       setMoments(items.filter((item) => visibleUserIds.has(item.userId)));
     });
-
     return () => unsubscribe();
   }, [visibleUserIds]);
 
@@ -307,7 +334,6 @@ export default function MapScreen({ navigation }) {
     if (!coords || !mapRef.current || !followCurrentUser) {
       return;
     }
-
     mapRef.current.animateCamera(
       {
         center: {
@@ -316,22 +342,32 @@ export default function MapScreen({ navigation }) {
         },
         zoom: 16.1,
       },
-      { duration: 800 }
+      { duration: 800 },
     );
   }, [coords?.latitude, coords?.longitude, followCurrentUser]);
 
   useEffect(() => {
-    const unsubscribe = locationService.subscribeToInteractions((interactions) => {
-      if (!interactions?.length) return;
-      const latest = interactions[interactions.length - 1];
-      setIncomingInteraction(latest);
-      interactionAnim.setValue(0);
-      Animated.sequence([
-        Animated.spring(interactionAnim, { toValue: 1, useNativeDriver: true, tension: 80 }),
-        Animated.delay(1600),
-        Animated.timing(interactionAnim, { toValue: 0, duration: 350, useNativeDriver: true }),
-      ]).start(() => setIncomingInteraction(null));
-    });
+    const unsubscribe = locationService.subscribeToInteractions(
+      (interactions) => {
+        if (!interactions?.length) return;
+        const latest = interactions[interactions.length - 1];
+        setIncomingInteraction(latest);
+        interactionAnim.setValue(0);
+        Animated.sequence([
+          Animated.spring(interactionAnim, {
+            toValue: 1,
+            useNativeDriver: true,
+            tension: 80,
+          }),
+          Animated.delay(1600),
+          Animated.timing(interactionAnim, {
+            toValue: 0,
+            duration: 350,
+            useNativeDriver: true,
+          }),
+        ]).start(() => setIncomingInteraction(null));
+      },
+    );
     return () => unsubscribe();
   }, [interactionAnim]);
 
@@ -345,23 +381,25 @@ export default function MapScreen({ navigation }) {
   const { friends: mockFriends, trails: mockTrails } = useMockFriends(
     coords?.latitude ?? 10.8839,
     coords?.longitude ?? 106.7804,
-    mockMode
+    mockMode,
   );
 
   const onlineUsers = useMemo(
     () => Object.entries({ ...otherUsers, ...mockFriends }),
-    [otherUsers, mockFriends]
+    [otherUsers, mockFriends],
   );
+
   const visibleMoments = useMemo(
     () => moments.filter((moment) => getMomentCoordinates(moment)),
-    [moments]
+    [moments],
   );
+
   const renderedFootprints = useMemo(() => {
     const nextFootprints = [...footprints];
 
     if (localTrail.length > 1) {
       nextFootprints.push({
-        uid: 'me-live-trail',
+        uid: "me-live-trail",
         displayName: currentName,
         initials: currentName.slice(0, 1).toUpperCase(),
         coordinates: localTrail,
@@ -386,7 +424,6 @@ export default function MapScreen({ navigation }) {
     setSelectedFriendUid(uid);
     setSelectedUser({ uid, ...user });
     setShowMyCard(false);
-
     mapRef.current?.animateCamera(
       {
         center: {
@@ -398,7 +435,7 @@ export default function MapScreen({ navigation }) {
         heading: 0,
         altitude: 420,
       },
-      { duration: 950 }
+      { duration: 950 },
     );
   };
 
@@ -419,31 +456,38 @@ export default function MapScreen({ navigation }) {
         heading: 0,
         altitude: 460,
       },
-      { duration: 900 }
+      { duration: 900 },
     );
   };
 
   const handleShareMoment = async (mode) => {
     try {
       const permission =
-        mode === 'camera'
+        mode === "camera"
           ? await ImagePicker.requestCameraPermissionsAsync()
           : await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (permission.status !== 'granted') {
+
+      if (permission.status !== "granted") {
         Alert.alert(
-          'Permission needed',
-          mode === 'camera'
-            ? 'Please allow camera access in Settings to share a live moment.'
-            : 'Please allow photo access in Settings to share a live moment.',
-          [{ text: 'OK', style: 'cancel' }]
+          "Permission needed",
+          mode === "camera"
+            ? "Please allow camera access in Settings to share a live moment."
+            : "Please allow photo access in Settings to share a live moment.",
+          [{ text: "OK", style: "cancel" }],
         );
         return;
       }
 
       const result =
-        mode === 'camera'
-          ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.8 })
-          : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 });
+        mode === "camera"
+          ? await ImagePicker.launchCameraAsync({
+              mediaTypes: ["images"],
+              quality: 0.8,
+            })
+          : await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ["images"],
+              quality: 0.8,
+            });
 
       if (result.canceled || !result.assets?.[0]?.uri || !coords) {
         return;
@@ -454,33 +498,54 @@ export default function MapScreen({ navigation }) {
         location,
       });
 
-      Alert.alert('Shared', 'Your moment is now visible on the map.');
+      Alert.alert("Shared", "Your moment is now visible on the map.");
     } catch (error) {
-      Alert.alert('Upload failed', error.message || 'Could not share this moment.');
+      Alert.alert(
+        "Upload failed",
+        error.message || "Could not share this moment.",
+      );
     }
   };
 
   const openMomentPicker = () => {
-    Alert.alert('Share a moment', 'Choose how you want to post it.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Camera', onPress: () => handleShareMoment('camera') },
-      { text: 'Library', onPress: () => handleShareMoment('library') },
+    Alert.alert("Share a moment", "Choose how you want to post it.", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Camera", onPress: () => handleShareMoment("camera") },
+      { text: "Library", onPress: () => handleShareMoment("library") },
     ]);
+  };
+
+  const openMomentsSheet = () => {
+    setShowMomentsSheet(true);
+    momentsSheetAnim.setValue(0);
+    Animated.spring(momentsSheetAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+      tension: 65,
+      friction: 11,
+    }).start();
+  };
+
+  const closeMomentsSheet = () => {
+    Animated.timing(momentsSheetAnim, {
+      toValue: 0,
+      duration: 260,
+      useNativeDriver: true,
+    }).start(() => setShowMomentsSheet(false));
   };
 
   const handleNavigate = useCallback(() => {
     if (!selectedUser?.latitude || !selectedUser?.longitude) return;
-
     const { latitude, longitude } = selectedUser;
-    const label = encodeURIComponent(selectedUser.displayName || 'Friend');
-
+    const label = encodeURIComponent(selectedUser.displayName || "Friend");
     const url = Platform.select({
       android: `google.navigation:q=${latitude},${longitude}&labels=${label}`,
       ios: `maps://app?daddr=${latitude},${longitude}&q=${label}`,
     });
-
     Linking.openURL(url).catch(() => {
-      Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}`);
+      Linking.openURL(
+        `https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}`,
+      );
     });
   }, [selectedUser]);
 
@@ -492,7 +557,8 @@ export default function MapScreen({ navigation }) {
         </View>
         <Text style={styles.loadingTitle}>Finding your live location...</Text>
         <Text style={styles.loadingHint}>
-          {errorMsg || 'Turn on GPS and grant location permission so the map can update.'}
+          {errorMsg ||
+            "Turn on GPS and grant location permission so the map can update."}
         </Text>
       </View>
     );
@@ -521,7 +587,10 @@ export default function MapScreen({ navigation }) {
         }}
       >
         <Marker
-          coordinate={{ latitude: coords?.latitude ?? 21.0285, longitude: coords?.longitude ?? 105.8542 }}
+          coordinate={{
+            latitude: coords?.latitude ?? 21.0285,
+            longitude: coords?.longitude ?? 105.8542,
+          }}
           anchor={{ x: 0.5, y: 0.6 }}
           zIndex={1000}
           onPress={() => {
@@ -537,9 +606,13 @@ export default function MapScreen({ navigation }) {
             <View style={styles.myLocationDot} />
             <View style={styles.myLocationRing} />
             {/* My note bubble */}
-            {myNote && myNoteAt && (Date.now() - myNoteAt) < 24 * 60 * 60 * 1000 ? (
+            {myNote &&
+            myNoteAt &&
+            Date.now() - myNoteAt < 24 * 60 * 60 * 1000 ? (
               <View style={styles.myMarkerNoteBubble}>
-                <Text style={styles.myMarkerNoteText} numberOfLines={2}>{myNote}</Text>
+                <Text style={styles.myMarkerNoteText} numberOfLines={2}>
+                  {myNote}
+                </Text>
                 <View style={styles.myMarkerNoteTail} />
               </View>
             ) : null}
@@ -552,7 +625,7 @@ export default function MapScreen({ navigation }) {
             ) : (
               <View style={styles.myInitialsOnMap}>
                 <Text style={styles.myInitialsText}>
-                  {currentName ? currentName.slice(0, 1).toUpperCase() : '?'}
+                  {currentName ? currentName.slice(0, 1).toUpperCase() : "?"}
                 </Text>
               </View>
             )}
@@ -564,9 +637,15 @@ export default function MapScreen({ navigation }) {
               <Polyline
                 key={`${path.uid}-${historyFilter}`}
                 coordinates={path.coordinates}
-                strokeColor={path.uid === 'me-live-trail' ? COLORS.ink : PATH_COLORS[index % PATH_COLORS.length]}
-                strokeWidth={path.uid === 'me-live-trail' ? 5 : 4}
-                lineDashPattern={path.uid === 'me-live-trail' ? [6, 6] : undefined}
+                strokeColor={
+                  path.uid === "me-live-trail"
+                    ? COLORS.ink
+                    : PATH_COLORS[index % PATH_COLORS.length]
+                }
+                strokeWidth={path.uid === "me-live-trail" ? 5 : 4}
+                lineDashPattern={
+                  path.uid === "me-live-trail" ? [6, 6] : undefined
+                }
                 lineCap="round"
                 lineJoin="round"
               />
@@ -580,11 +659,9 @@ export default function MapScreen({ navigation }) {
               latitude: user.latitude,
               longitude: user.longitude,
             });
-
           if (!animatedMarkersRef.current[uid]) {
             animatedMarkersRef.current[uid] = animatedCoordinate;
           }
-
           return (
             <Marker.Animated
               key={uid}
@@ -595,14 +672,14 @@ export default function MapScreen({ navigation }) {
               onPress={() => focusFriend(uid, user)}
             >
               <SocialMapMarker
-                name={user.displayName || 'Friend'}
+                name={user.displayName || "Friend"}
                 avatarUrl={user.avatarUrl}
                 speedKmh={user.speedKmh}
                 batteryLevel={user.batteryLevel}
                 stationarySince={user.stationarySince}
                 lastUpdatedAt={user.updatedAt}
                 isGhostMode={user.isGhostMode}
-                bubbleAccent={['#FDE68A', '#FDBA74', '#F9A8D4']}
+                bubbleAccent={["#FDE68A", "#FDBA74", "#F9A8D4"]}
                 isSelected={selectedFriendUid === uid}
                 note={user.note}
                 noteAt={user.noteAt}
@@ -619,10 +696,12 @@ export default function MapScreen({ navigation }) {
               coordinate={point}
               anchor={{ x: 0.5, y: 1 }}
               tracksViewChanges={false}
-              onPress={() => setSelectedMoment(moment)}
             >
               <View style={styles.momentPin}>
-                <Image source={{ uri: moment.imageUrl }} style={styles.momentImage} />
+                <Image
+                  source={{ uri: moment.imageUrl }}
+                  style={styles.momentImage}
+                />
               </View>
             </Marker>
           );
@@ -636,58 +715,94 @@ export default function MapScreen({ navigation }) {
           <Text style={styles.headerCity}>{cityName}</Text>
           <View style={styles.headerStats}>
             <View style={styles.statBadge}>
-              <Text style={styles.statNumber}>{friendCount || onlineUsers.length}</Text>
+              <Text style={styles.statNumber}>
+                {friendCount || onlineUsers.length}
+              </Text>
               <Text style={styles.statText}>LIVE FRIENDS</Text>
             </View>
-            <View style={[styles.statBadge, styles.statBadgePink]}>
-              <Text style={[styles.statNumber, styles.statNumberPink]}>{visibleMoments.length}</Text>
+            <TouchableOpacity
+              style={[styles.statBadge, styles.statBadgePink]}
+              onPress={openMomentsSheet}
+              activeOpacity={0.75}
+            >
+              <Text style={[styles.statNumber, styles.statNumberPink]}>
+                {visibleMoments.length}
+              </Text>
               <Text style={styles.statText}>MOMENTS</Text>
-            </View>
-            <TouchableOpacity style={styles.cameraButton} onPress={() => handleShareMoment('camera')}>
-              <Text style={styles.cameraText}>CAMERA{'\n'}LIVE</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.cameraButton}
+              onPress={() => handleShareMoment("camera")}
+            >
+              <Text style={styles.cameraText}>CAMERA{"\n"}LIVE</Text>
             </TouchableOpacity>
           </View>
         </View>
       </View>
 
       {/* Right side buttons - Bump style */}
-      <View style={[styles.rightButtons, { top: overlayTop + 180 }]}>
-        <TouchableOpacity style={styles.roundButton} onPress={() => navigation.navigate('Chats')}>
-          <MessageCircle color={COLORS.pink} size={24} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.roundButton} onPress={() => navigation.navigate('GiftCenter')}>
-          <Gift color={COLORS.orange} size={24} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.roundButton} onPress={() => setShowGlobe(true)}>
-          <Globe color={COLORS.blue} size={24} />
-        </TouchableOpacity>
-      </View>
+      {!selectedUser && (
+        <View style={[styles.rightButtons, { top: overlayTop + 180 }]}>
+          <TouchableOpacity
+            style={styles.roundButton}
+            onPress={() => navigation.navigate("Chats")}
+          >
+            <MessageCircle color={COLORS.pink} size={24} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.roundButton}
+            onPress={() => navigation.navigate("GiftCenter")}
+          >
+            <Gift color={COLORS.orange} size={24} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.roundButton}
+            onPress={() => setShowGlobe(true)}
+          >
+            <Globe color={COLORS.blue} size={24} />
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Bottom controls - Bump style */}
-      <View style={[styles.bottomControls, { bottom: overlayBottom }]}>
-        <TouchableOpacity
-          style={[styles.controlButton, showFootprints && styles.controlButtonActive]}
-          onPress={() => setShowFootprints((v) => !v)}
-        >
-          <Text style={[styles.controlText, showFootprints && styles.controlTextActive]}>
-            Trail {showFootprints ? 'on' : 'off'}
-          </Text>
-        </TouchableOpacity>
-
-        {!mockMode && !onlineUsers.length ? (
-          <TouchableOpacity style={styles.controlButtonDemo} onPress={() => setMockMode(true)}>
-            <Text style={styles.controlTextDemo}>Demo mode</Text>
+      {!selectedUser && (
+        <View style={[styles.bottomControls, { bottom: overlayBottom }]}>
+          <TouchableOpacity
+            style={[
+              styles.controlButton,
+              showFootprints && styles.controlButtonActive,
+            ]}
+            onPress={() => setShowFootprints((v) => !v)}
+          >
+            <Text
+              style={[
+                styles.controlText,
+                showFootprints && styles.controlTextActive,
+              ]}
+            >
+              Trail {showFootprints ? "on" : "off"}
+            </Text>
           </TouchableOpacity>
-        ) : null}
-
-        <TouchableOpacity
-          style={[styles.followButton, followCurrentUser && styles.followButtonActive]}
-          onPress={centerOnMe}
-        >
-          <Navigation color={COLORS.white} size={18} />
-          <Text style={styles.followText}>Following you</Text>
-        </TouchableOpacity>
-      </View>
+          {!mockMode && !onlineUsers.length ? (
+            <TouchableOpacity
+              style={styles.controlButtonDemo}
+              onPress={() => setMockMode(true)}
+            >
+              <Text style={styles.controlTextDemo}>Demo mode</Text>
+            </TouchableOpacity>
+          ) : null}
+          <TouchableOpacity
+            style={[
+              styles.followButton,
+              followCurrentUser && styles.followButtonActive,
+            ]}
+            onPress={centerOnMe}
+          >
+            <Navigation color={COLORS.white} size={18} />
+            <Text style={styles.followText}>Following you</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {showMyCard ? (
         <View style={[styles.myCard, { bottom: overlayBottom + 110 }]}>
@@ -695,15 +810,24 @@ export default function MapScreen({ navigation }) {
           <Text style={styles.myCardTitle}>{currentName}</Text>
           <View style={styles.myCardMetrics}>
             <View style={styles.myMetric}>
-              <Text style={styles.myMetricValue}>{Math.max(Number(location?.meta?.speedKmh || 0), 0).toFixed(0)}</Text>
+              <Text style={styles.myMetricValue}>
+                {Math.max(Number(location?.meta?.speedKmh || 0), 0).toFixed(0)}
+              </Text>
               <Text style={styles.myMetricLabel}>km/h</Text>
             </View>
             <View style={styles.myMetric}>
-              <Text style={styles.myMetricValue}>{Math.max(Number(location?.meta?.batteryLevel || 0), 0).toFixed(0)}%</Text>
+              <Text style={styles.myMetricValue}>
+                {Math.max(Number(location?.meta?.batteryLevel || 0), 0).toFixed(
+                  0,
+                )}
+                %
+              </Text>
               <Text style={styles.myMetricLabel}>battery</Text>
             </View>
             <View style={styles.myMetric}>
-              <Text style={styles.myMetricValue}>{followCurrentUser ? 'Live' : 'Free'}</Text>
+              <Text style={styles.myMetricValue}>
+                {followCurrentUser ? "Live" : "Free"}
+              </Text>
               <Text style={styles.myMetricLabel}>camera</Text>
             </View>
           </View>
@@ -712,12 +836,14 @@ export default function MapScreen({ navigation }) {
 
       <SelectedUserSheet
         user={selectedUser}
+        moments={moments}
+        onOpenMoment={(moment) => setSelectedMoment(moment)}
         bottomOffset={overlayBottom}
         onClose={() => {
           setSelectedUser(null);
           setSelectedFriendUid(null);
         }}
-        onChat={() => navigation.navigate('Chats')}
+        onChat={() => navigation.navigate("Chats")}
         onInteract={(emoji) => {
           if (selectedUser?.uid) {
             locationService.pushInteraction(selectedUser.uid, emoji);
@@ -730,7 +856,7 @@ export default function MapScreen({ navigation }) {
         }}
         onViewProfile={() => {
           if (selectedUser?.uid) {
-            navigation.navigate('FriendProfile', {
+            navigation.navigate("FriendProfile", {
               friendUid: selectedUser.uid,
               friendData: selectedUser,
             });
@@ -738,7 +864,10 @@ export default function MapScreen({ navigation }) {
         }}
       />
 
-      <MomentViewerModal moment={selectedMoment} onClose={() => setSelectedMoment(null)} />
+      <MomentViewerModal
+        moment={selectedMoment}
+        onClose={() => setSelectedMoment(null)}
+      />
 
       <NoteInputModal
         visible={showNoteModal}
@@ -796,7 +925,9 @@ export default function MapScreen({ navigation }) {
             },
           ]}
         >
-          <Text style={styles.interactionEmoji}>{incomingInteraction.emoji}</Text>
+          <Text style={styles.interactionEmoji}>
+            {incomingInteraction.emoji}
+          </Text>
           <Text style={styles.interactionLabel}>A friend reacted to you</Text>
         </Animated.View>
       ) : null}
@@ -815,6 +946,130 @@ export default function MapScreen({ navigation }) {
           }
         }}
       />
+
+      {/* ── Moments Sheet ─────────────────────────────────────── */}
+      <Modal
+        visible={showMomentsSheet}
+        transparent
+        animationType="none"
+        onRequestClose={closeMomentsSheet}
+      >
+        <View style={styles.momentsOverlay}>
+          <TouchableOpacity
+            style={styles.momentsBackdrop}
+            activeOpacity={1}
+            onPress={closeMomentsSheet}
+          />
+          <Animated.View
+            style={[
+              styles.momentsSheet,
+              { bottom: insets.bottom },
+              {
+                transform: [
+                  {
+                    translateY: momentsSheetAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [700, 0],
+                    }),
+                  },
+                ],
+                opacity: momentsSheetAnim,
+              },
+            ]}
+          >
+            {/* Handle */}
+            <View style={styles.momentsHandle} />
+
+            {/* Header */}
+            <View style={styles.momentsHeader}>
+              <View>
+                <Text style={styles.momentsTitle}>Moments</Text>
+                <Text style={styles.momentsSubtitle}>
+                  {visibleMoments.length} post
+                  {visibleMoments.length !== 1 ? "s" : ""} in the last 24h
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.momentsCloseBtn}
+                onPress={closeMomentsSheet}
+              >
+                <Text style={styles.momentsCloseBtnText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Content */}
+            {visibleMoments.length === 0 ? (
+              <View style={styles.momentsEmpty}>
+                <Text style={styles.momentsEmptyEmoji}>📷</Text>
+                <Text style={styles.momentsEmptyTitle}>No moments yet</Text>
+                <Text style={styles.momentsEmptyHint}>
+                  You and your friends haven't posted anything in the last 24
+                  hours.
+                </Text>
+                <TouchableOpacity
+                  style={styles.momentsShareBtn}
+                  onPress={() => {
+                    closeMomentsSheet();
+                    setTimeout(() => handleShareMoment("camera"), 300);
+                  }}
+                >
+                  <Text style={styles.momentsShareBtnText}>Share a moment</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <FlatList
+                data={visibleMoments}
+                keyExtractor={(item) => item.id}
+                numColumns={2}
+                contentContainerStyle={styles.momentsGrid}
+                showsVerticalScrollIndicator={false}
+                renderItem={({ item }) => {
+                  const isMe = item.userId === auth.currentUser?.uid;
+                  const ageMs =
+                    Date.now() -
+                    (item.createdAt?.toMillis?.() ?? item.createdAt ?? 0);
+                  const ageH = Math.floor(ageMs / 3600000);
+                  const ageM = Math.floor((ageMs % 3600000) / 60000);
+                  const ageLabel = ageH > 0 ? `${ageH}h ago` : `${ageM}m ago`;
+                  return (
+                    <TouchableOpacity
+                      style={styles.momentCard}
+                      activeOpacity={0.88}
+                      onPress={() => {
+                        closeMomentsSheet();
+                        setTimeout(() => setSelectedMoment(item), 320);
+                      }}
+                    >
+                      <Image
+                        source={{ uri: item.imageUrl }}
+                        style={styles.momentCardImage}
+                      />
+                      {/* Gradient overlay */}
+                      <View style={styles.momentCardOverlay}>
+                        <View style={styles.momentCardBottom}>
+                          <View
+                            style={[
+                              styles.momentCardOwnerDot,
+                              isMe && styles.momentCardOwnerDotMe,
+                            ]}
+                          />
+                          <Text
+                            style={styles.momentCardOwner}
+                            numberOfLines={1}
+                          >
+                            {isMe ? "You" : item.displayName || "Friend"}
+                          </Text>
+                          <Text style={styles.momentCardAge}>{ageLabel}</Text>
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                }}
+              />
+            )}
+          </Animated.View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -826,8 +1081,8 @@ const styles = StyleSheet.create({
   },
   loadingScreen: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     backgroundColor: COLORS.bg,
     paddingHorizontal: 24,
   },
@@ -836,32 +1091,33 @@ const styles = StyleSheet.create({
     height: 80,
     borderRadius: 40,
     backgroundColor: COLORS.accentDim,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     marginBottom: 20,
   },
   loadingTitle: {
     color: COLORS.textPrimary,
     fontSize: 20,
-    fontWeight: '900',
-    textAlign: 'center',
+    fontWeight: "900",
+    textAlign: "center",
   },
   loadingHint: {
     color: COLORS.textSecondary,
     fontSize: 13,
     marginTop: 10,
-    textAlign: 'center',
+    textAlign: "center",
     lineHeight: 20,
   },
+
   // Header - Bump style
   header: {
-    position: 'absolute',
+    position: "absolute",
     left: 20,
     right: 20,
     zIndex: 40,
   },
   headerCard: {
-    backgroundColor: 'rgba(255,255,255,0.95)',
+    backgroundColor: "rgba(255,255,255,0.95)",
     borderRadius: 24,
     padding: 20,
     ...SHADOW.card,
@@ -869,19 +1125,19 @@ const styles = StyleSheet.create({
   headerLabel: {
     color: COLORS.accent,
     fontSize: 11,
-    fontWeight: '900',
+    fontWeight: "900",
     letterSpacing: 1.5,
     marginBottom: 4,
   },
   headerCity: {
     color: COLORS.textPrimary,
     fontSize: 28,
-    fontWeight: '900',
+    fontWeight: "900",
     letterSpacing: -1,
     marginBottom: 12,
   },
   headerStats: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 8,
   },
   statBadge: {
@@ -890,15 +1146,15 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     paddingVertical: 12,
     paddingHorizontal: 12,
-    alignItems: 'center',
+    alignItems: "center",
   },
   statBadgePink: {
-    backgroundColor: 'rgba(236,72,153,0.1)',
+    backgroundColor: "rgba(236,72,153,0.1)",
   },
   statNumber: {
     color: COLORS.accent,
     fontSize: 20,
-    fontWeight: '900',
+    fontWeight: "900",
     marginBottom: 2,
   },
   statNumberPink: {
@@ -907,7 +1163,7 @@ const styles = StyleSheet.create({
   statText: {
     color: COLORS.textMuted,
     fontSize: 9,
-    fontWeight: '800',
+    fontWeight: "800",
     letterSpacing: 0.5,
   },
   cameraButton: {
@@ -915,20 +1171,21 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     paddingVertical: 12,
     paddingHorizontal: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   cameraText: {
     color: COLORS.white,
     fontSize: 10,
-    fontWeight: '900',
+    fontWeight: "900",
     letterSpacing: 0.5,
-    textAlign: 'center',
+    textAlign: "center",
     lineHeight: 14,
   },
+
   // Right buttons
   rightButtons: {
-    position: 'absolute',
+    position: "absolute",
     right: 20,
     zIndex: 35,
     gap: 12,
@@ -938,16 +1195,17 @@ const styles = StyleSheet.create({
     height: 56,
     borderRadius: 28,
     backgroundColor: COLORS.white,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     ...SHADOW.card,
   },
+
   // Bottom controls
   bottomControls: {
-    position: 'absolute',
+    position: "absolute",
     left: 20,
     right: 20,
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 10,
     zIndex: 35,
   },
@@ -956,8 +1214,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderRadius: 24,
     backgroundColor: COLORS.white,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     ...SHADOW.card,
   },
   controlButtonActive: {
@@ -966,7 +1224,7 @@ const styles = StyleSheet.create({
   controlText: {
     color: COLORS.textPrimary,
     fontSize: 14,
-    fontWeight: '800',
+    fontWeight: "800",
   },
   controlTextActive: {
     color: COLORS.white,
@@ -976,23 +1234,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderRadius: 24,
     backgroundColor: COLORS.white,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     ...SHADOW.card,
   },
   controlTextDemo: {
     color: COLORS.textPrimary,
     fontSize: 14,
-    fontWeight: '800',
+    fontWeight: "800",
   },
   followButton: {
     flex: 1,
     height: 48,
     borderRadius: 24,
     backgroundColor: COLORS.white,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     gap: 8,
     ...SHADOW.card,
   },
@@ -1002,8 +1260,9 @@ const styles = StyleSheet.create({
   followText: {
     color: COLORS.white,
     fontSize: 14,
-    fontWeight: '900',
+    fontWeight: "900",
   },
+
   // Moment pin
   momentPin: {
     width: 44,
@@ -1016,18 +1275,19 @@ const styles = StyleSheet.create({
     ...SHADOW.card,
   },
   momentImage: {
-    width: '100%',
-    height: '100%',
+    width: "100%",
+    height: "100%",
     borderRadius: 11,
     backgroundColor: COLORS.bgSoft,
   },
+
   interactionOverlay: {
-    position: 'absolute',
-    top: '35%',
-    alignSelf: 'center',
-    alignItems: 'center',
+    position: "absolute",
+    top: "35%",
+    alignSelf: "center",
+    alignItems: "center",
     zIndex: 999,
-    backgroundColor: 'rgba(255,255,255,0.98)',
+    backgroundColor: "rgba(255,255,255,0.98)",
     borderRadius: 28,
     paddingHorizontal: 28,
     paddingVertical: 20,
@@ -1038,24 +1298,25 @@ const styles = StyleSheet.create({
   interactionEmoji: {
     fontSize: 28,
     color: COLORS.textPrimary,
-    fontWeight: '900',
+    fontWeight: "900",
   },
   interactionLabel: {
     color: COLORS.textSecondary,
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: "700",
     marginTop: 8,
-    textAlign: 'center',
+    textAlign: "center",
   },
-  // ── My location marker ──────────────────────────────────────
+
+  // ── My location marker ────────────────────────────────────────
   myLocationWrap: {
     width: 48,
     height: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   myLocationDot: {
-    position: 'absolute',
+    position: "absolute",
     width: 14,
     height: 14,
     borderRadius: 7,
@@ -1067,7 +1328,7 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   myLocationRing: {
-    position: 'absolute',
+    position: "absolute",
     width: 32,
     height: 32,
     borderRadius: 16,
@@ -1081,29 +1342,30 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 2.5,
     borderColor: COLORS.white,
-    position: 'absolute',
+    position: "absolute",
   },
   myInitialsOnMap: {
     width: 36,
     height: 36,
     borderRadius: 18,
     backgroundColor: COLORS.me,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     borderWidth: 2.5,
     borderColor: COLORS.white,
-    position: 'absolute',
+    position: "absolute",
   },
   myInitialsText: {
     color: COLORS.white,
     fontSize: 15,
-    fontWeight: '900',
+    fontWeight: "900",
   },
-  // ── My note bubble on marker ─────────────────────────────────
+
+  // ── My note bubble on marker ───────────────────────────────────
   myMarkerNoteBubble: {
-    position: 'absolute',
+    position: "absolute",
     bottom: 44,
-    left: '50%',
+    left: "50%",
     transform: [{ translateX: -50 }],
     width: 100,
     backgroundColor: COLORS.bgCard,
@@ -1118,27 +1380,170 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 6,
     zIndex: 1001,
-    alignItems: 'center',
+    alignItems: "center",
   },
   myMarkerNoteText: {
     fontSize: 9,
-    fontWeight: '700',
+    fontWeight: "700",
     color: COLORS.textPrimary,
-    textAlign: 'center',
+    textAlign: "center",
     lineHeight: 13,
   },
   myMarkerNoteTail: {
-    position: 'absolute',
+    position: "absolute",
     bottom: -5,
-    left: '50%',
+    left: "50%",
     transform: [{ translateX: -5 }],
     width: 0,
     height: 0,
     borderLeftWidth: 5,
     borderRightWidth: 5,
     borderTopWidth: 5,
-    borderLeftColor: 'transparent',
-    borderRightColor: 'transparent',
+    borderLeftColor: "transparent",
+    borderRightColor: "transparent",
     borderTopColor: COLORS.bgCard,
+  },
+
+  // ── Moments Sheet ─────────────────────────────────────────────
+  momentsOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  momentsBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.45)",
+  },
+  momentsSheet: {
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    maxHeight: "82%",
+    paddingTop: 12,
+    ...SHADOW.card,
+  },
+  momentsHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: COLORS.border,
+    alignSelf: "center",
+    marginBottom: 16,
+  },
+  momentsHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    marginBottom: 16,
+  },
+  momentsTitle: {
+    fontSize: 22,
+    fontWeight: "900",
+    color: COLORS.textPrimary,
+    letterSpacing: -0.5,
+  },
+  momentsSubtitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  momentsCloseBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.bgSoft,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  momentsCloseBtnText: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: COLORS.textSecondary,
+  },
+  momentsGrid: {
+    paddingHorizontal: 12,
+    paddingBottom: 32,
+    gap: 8,
+  },
+  momentCard: {
+    flex: 1,
+    margin: 4,
+    height: 200,
+    borderRadius: 18,
+    overflow: "hidden",
+    backgroundColor: COLORS.bgSoft,
+    ...SHADOW.card,
+  },
+  momentCardImage: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
+  },
+  momentCardOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    backgroundGradient: "transparent",
+  },
+  momentCardBottom: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingBottom: 10,
+    gap: 5,
+  },
+  momentCardOwnerDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: COLORS.pink,
+  },
+  momentCardOwnerDotMe: {
+    backgroundColor: COLORS.accent,
+  },
+  momentCardOwner: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: "800",
+    color: COLORS.white,
+  },
+  momentCardAge: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "rgba(255,255,255,0.75)",
+  },
+  momentsEmpty: {
+    alignItems: "center",
+    paddingVertical: 48,
+    paddingHorizontal: 32,
+  },
+  momentsEmptyEmoji: {
+    fontSize: 48,
+    marginBottom: 16,
+  },
+  momentsEmptyTitle: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: COLORS.textPrimary,
+    marginBottom: 8,
+  },
+  momentsEmptyHint: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    textAlign: "center",
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  momentsShareBtn: {
+    backgroundColor: COLORS.ink,
+    paddingHorizontal: 28,
+    paddingVertical: 14,
+    borderRadius: 24,
+  },
+  momentsShareBtnText: {
+    color: COLORS.white,
+    fontSize: 15,
+    fontWeight: "900",
   },
 });

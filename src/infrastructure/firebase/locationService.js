@@ -101,14 +101,14 @@ function normalizeCoords(coords) {
 
 function formatRelativeTime(timestamp) {
   if (!timestamp) {
-    return 'just now';
+    return 'now';
   }
 
   const diffMs = Date.now() - timestamp;
   const minutes = Math.max(Math.floor(diffMs / 60000), 0);
 
   if (minutes < 1) {
-    return 'just now';
+    return 'now';
   }
 
   if (minutes < 60) {
