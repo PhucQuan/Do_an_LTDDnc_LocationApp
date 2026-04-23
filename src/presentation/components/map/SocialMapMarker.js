@@ -1,29 +1,22 @@
 import React, { memo, useEffect, useRef, useState } from "react";
 import { Animated, Image, StyleSheet, Text, View } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
 import { COLORS, SHADOW } from "../../theme";
 
-const FALLBACK_COLORS = [
-  ["#60A5FA", "#3B82F6"], // blue
-  ["#A78BFA", "#8B5CF6"], // purple
-  ["#F472B6", "#EC4899"], // pink
-  ["#34D399", "#10B981"], // green
-  ["#FBBF24", "#F59E0B"], // yellow
-  ["#FB7185", "#F43F5E"], // red
-];
-
-function getFallbackAvatarUrl(name) {
-  return `https://ui-avatars.com/api/?name=${encodeURIComponent(
-    name || "Friend",
-  )}`;
-}
-
-function getFallbackGradient(name) {
+function getRandomColor(name) {
   let hash = 0;
   for (let i = 0; i < (name || "").length; i++) {
     hash = name.charCodeAt(i) + ((hash << 5) - hash);
   }
-  return FALLBACK_COLORS[Math.abs(hash) % FALLBACK_COLORS.length];
+
+  const colors = [
+    "#60A5FA",
+    "#F472B6",
+    "#34D399",
+    "#FBBF24",
+    "#A78BFA",
+    "#FB7185",
+  ];
+  return colors[Math.abs(hash) % colors.length];
 }
 
 function getSpeedColor(speedKmh) {
@@ -34,24 +27,18 @@ function getSpeedColor(speedKmh) {
 }
 
 function isLive(lastUpdatedAt) {
-  if (!lastUpdatedAt) {
-    return false;
-  }
-
+  if (!lastUpdatedAt) return false;
   return Date.now() - Number(lastUpdatedAt) <= 2 * 60 * 1000;
 }
 
 function getActiveNote(note, noteAt) {
-  if (!note || !noteAt) {
-    return null;
-  }
-
+  if (!note || !noteAt) return null;
   return Date.now() - Number(noteAt) < 24 * 60 * 60 * 1000 ? note : null;
 }
 
 function SocialMapMarkerComponent({
   name,
-  avatarUrl,
+  avatarUrl = null,
   speedKmh = 0,
   batteryLevel = 100,
   lastUpdatedAt,
@@ -59,69 +46,40 @@ function SocialMapMarkerComponent({
   isSelected = false,
   note = null,
   noteAt = null,
-  onLoad,
+  onLoad = null,
 }) {
-  const [imageFailed, setImageFailed] = useState(false);
   const live = isLive(lastUpdatedAt) && !isGhostMode;
   const activeNote = getActiveNote(note, noteAt);
-  const gradientColors = getFallbackGradient(name);
   const speedColor = getSpeedColor(speedKmh);
   const isMoving = speedKmh && speedKmh > 1;
 
-  // Pulse animation for live users
+  const randomColor = getRandomColor(name);
+
+  // animation (giữ lại nếu sau này muốn dùng)
   const pulseAnim = useRef(new Animated.Value(1)).current;
-  const glowAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    if (live && !isGhostMode) {
-      // Pulse animation
+    if (live) {
       Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, {
-            toValue: 1.15,
-            duration: 1200,
+            toValue: 1.1,
+            duration: 1000,
             useNativeDriver: true,
           }),
           Animated.timing(pulseAnim, {
             toValue: 1,
-            duration: 1200,
-            useNativeDriver: true,
-          }),
-        ]),
-      ).start();
-
-      // Glow animation
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(glowAnim, {
-            toValue: 1,
-            duration: 1500,
-            useNativeDriver: true,
-          }),
-          Animated.timing(glowAnim, {
-            toValue: 0,
-            duration: 1500,
+            duration: 1000,
             useNativeDriver: true,
           }),
         ]),
       ).start();
     }
-  }, [live, isGhostMode, pulseAnim, glowAnim]);
-
-  const glowOpacity = glowAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.3, 0.8],
-  });
-
-  useEffect(() => {
-    setImageFailed(false);
-  }, [avatarUrl]);
-
-  const shouldShowImage = Boolean(avatarUrl) && !imageFailed;
+  }, [live]);
 
   return (
-    <View style={styles.wrap} collapsable={false} renderToHardwareTextureAndroid={false}>
-      {/* Note bubble */}
+    <View style={styles.wrap}>
+      {/* Note bubble - trên cùng */}
       {activeNote ? (
         <View style={styles.noteBubble}>
           <Text style={styles.noteText} numberOfLines={1}>
@@ -131,76 +89,25 @@ function SocialMapMarkerComponent({
         </View>
       ) : null}
 
-      {/* Speed indicator */}
-      {isMoving ? (
-        <View style={[styles.speedBubble, { borderColor: speedColor }]}>
-          <Text style={[styles.speedText, { color: speedColor }]}>
-            {Math.round(speedKmh)}
-          </Text>
-          <Text style={styles.speedUnit}>km/h</Text>
-        </View>
-      ) : null}
-
-      {/* Glow effect disabled for stability */}
-      {/* {live && !isGhostMode ? (
-        <Animated.View
-          style={[
-            styles.glowRing,
-            {
-              opacity: glowOpacity,
-              transform: [{ scale: pulseAnim }],
-            },
-          ]}
-        >
-          <View
-            style={[styles.glowGradient, { backgroundColor: gradientColors[0] + "40" }]}
-          />
-        </Animated.View>
-      ) : null} */}
-
-      {/* Avatar container with solid border */}
-      <View
+      {/* Avatar or colored dot */}
+      <Animated.View
         style={[
-          styles.avatarContainer,
-          isSelected && styles.avatarContainerSelected,
+          styles.dot,
+          {
+            backgroundColor: randomColor,
+            transform: [{ scale: isSelected ? 1.2 : 1 }],
+          },
         ]}
       >
-        <View
-          style={[
-            styles.gradientBorder,
-            { backgroundColor: live ? gradientColors[0] : COLORS.offline },
-          ]}
-        >
-          <View style={styles.avatarInner}>
-            {shouldShowImage ? (
-              <Image
-                source={{ uri: avatarUrl }}
-                style={[styles.avatar, !live && styles.avatarGhost]}
-                onLoadEnd={onLoad}
-                onError={() => setImageFailed(true)}
-              />
-            ) : (
-              <View style={styles.fallbackAvatar}>
-                <Text style={styles.initials}>
-                  {name ? name.slice(0, 1).toUpperCase() : "?"}
-                </Text>
-              </View>
-            )}
-          </View>
-        </View>
-      </View>
-
-        {/* Battery indicator */}
-        {batteryLevel < 20 && live ? (
-          <View style={styles.batteryBadge}>
-            <Text style={styles.batteryText}>{Math.round(batteryLevel)}%</Text>
-          </View>
+        {avatarUrl ? (
+          <Image
+            source={{ uri: avatarUrl }}
+            style={styles.avatarImage}
+            onLoad={onLoad}
+            resizeMode="cover"
+          />
         ) : null}
-
-      {/* Name label */}
-      <Text style={styles.nameLabel} numberOfLines={1}>
-        {name}
-      </Text>
+      </Animated.View>
 
       {/* Status dot */}
       <View
@@ -209,6 +116,11 @@ function SocialMapMarkerComponent({
           live ? styles.statusLive : styles.statusOffline,
         ]}
       />
+
+      {/* Name - dưới cùng */}
+      <Text style={styles.nameLabel} numberOfLines={2}>
+        {name}
+      </Text>
     </View>
   );
 }
@@ -219,17 +131,21 @@ const styles = StyleSheet.create({
   wrap: {
     alignItems: "center",
     justifyContent: "center",
-    width: 100,
-    height: 145,
+    paddingVertical: 2,
+    paddingHorizontal: 2,
+    flexDirection: "column",
+    width: 400,
+    height: 400,
   },
-  // Note bubble
+
+  // note bubble (ở trên)
   noteBubble: {
     position: "absolute",
-    top: -28,
+    top: -40,
     minWidth: 60,
     maxWidth: 140,
     paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingVertical: 6,
     borderRadius: 16,
     backgroundColor: COLORS.bgCard,
     borderWidth: 1.5,
@@ -257,139 +173,51 @@ const styles = StyleSheet.create({
     borderRightColor: "transparent",
     borderTopColor: COLORS.bgCard,
   },
-  // Speed bubble
-  speedBubble: {
-    position: "absolute",
-    top: -8,
-    right: -12,
-    flexDirection: "row",
-    alignItems: "baseline",
-    gap: 2,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    backgroundColor: COLORS.bg,
-    borderWidth: 2,
-    zIndex: 9,
-  },
-  speedText: {
-    fontSize: 13,
-    fontWeight: "900",
-    letterSpacing: -0.5,
-  },
-  speedUnit: {
-    fontSize: 8,
-    fontWeight: "800",
-    color: COLORS.textMuted,
-    textTransform: "uppercase",
-  },
-  // Glow effect
-  glowRing: {
-    position: "absolute",
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    zIndex: 1,
-  },
-  glowGradient: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-  },
-  // Avatar container
-  avatarContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+
+  // dot (ở giữa) - PHẢI tròn
+  dot: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
     zIndex: 5,
-  },
-  avatarContainerSelected: {
-    transform: [{ scale: 1.15 }],
-  },
-  gradientBorder: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    padding: 3,
-  },
-  offlineBorder: {
-    backgroundColor: COLORS.bgSoft,
-    borderWidth: 2,
-    borderColor: COLORS.border,
-    padding: 2,
-  },
-  avatarInner: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    overflow: "hidden",
-    backgroundColor: COLORS.bg,
-  },
-  avatar: {
-    width: 50,
-    height: 50,
-  },
-  avatarGhost: {
-    opacity: 0.5,
-  },
-  fallbackAvatar: {
-    flex: 1,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
+    flexShrink: 0,
   },
-  initials: {
-    color: COLORS.white,
+
+  avatarImage: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 50,
+  },
+
+  // name (ở dưới)
+  nameLabel: {
+    marginTop: 12,
+    textAlign: "center",
+    color: COLORS.textPrimary,
     fontSize: 16,
-    fontWeight: "900",
-    letterSpacing: 0.5,
+    fontWeight: "700",
+    maxWidth: 160,
+    flexShrink: 0,
   },
-  // Battery badge
-  batteryBadge: {
-    position: "absolute",
-    bottom: -4,
-    right: -4,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 8,
-    backgroundColor: COLORS.danger,
-    borderWidth: 2,
-    borderColor: COLORS.bg,
-    zIndex: 6,
-  },
-  batteryText: {
-    color: COLORS.white,
-    fontSize: 9,
-    fontWeight: "900",
-  },
-  // Status dot
+
+  // status
   statusDot: {
     position: "absolute",
     bottom: 2,
     right: 2,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    borderWidth: 2.5,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 3,
     borderColor: COLORS.bg,
-    zIndex: 6,
   },
   statusLive: {
     backgroundColor: COLORS.neonGreen,
   },
   statusOffline: {
     backgroundColor: COLORS.offline,
-  },
-  // Name label
-  nameLabel: {
-    position: "absolute",
-    bottom: -24,
-    left: 0,
-    right: 0,
-    textAlign: "center",
-    color: COLORS.textPrimary,
-    fontSize: 12,
-    fontWeight: "700",
-    maxWidth: 90,
-    alignSelf: "center",
   },
 });

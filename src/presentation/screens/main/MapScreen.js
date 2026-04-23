@@ -191,10 +191,14 @@ export default function MapScreen({ navigation }) {
           const nextProfile = userSnapshot.data();
           setCurrentProfile(nextProfile);
 
-          const migratedAvatarUrl =
-            await avatarMigrationService.migrateCurrentUserAvatarIfNeeded(nextProfile).catch(() => null);
+          const migratedAvatarUrl = await avatarMigrationService
+            .migrateCurrentUserAvatarIfNeeded(nextProfile)
+            .catch(() => null);
 
-          if (migratedAvatarUrl && migratedAvatarUrl !== nextProfile?.avatarUrl) {
+          if (
+            migratedAvatarUrl &&
+            migratedAvatarUrl !== nextProfile?.avatarUrl
+          ) {
             setCurrentProfile((prev) => ({
               ...(prev || nextProfile),
               avatarUrl: migratedAvatarUrl,
@@ -363,7 +367,10 @@ export default function MapScreen({ navigation }) {
           }, {}),
         );
       } catch (error) {
-        console.warn("[MapScreen] Could not hydrate friend profiles:", error.message);
+        console.warn(
+          "[MapScreen] Could not hydrate friend profiles:",
+          error.message,
+        );
       }
     };
 
@@ -447,10 +454,7 @@ export default function MapScreen({ navigation }) {
           {
             ...user,
             displayName: profile?.displayName || user.displayName || "Friend",
-            avatarUrl:
-              profile?.avatarUrl ||
-              user.avatarUrl ||
-              fallbackAvatar,
+            avatarUrl: profile?.avatarUrl || user.avatarUrl || fallbackAvatar,
           },
         ];
       }),
@@ -729,7 +733,11 @@ export default function MapScreen({ navigation }) {
               key={uid}
               coordinate={animatedCoordinate}
               anchor={{ x: 0.5, y: 0.72 }}
-              tracksViewChanges={Platform.OS === "android" ? true : Boolean(user.avatarUrl) && !markerLoaded[uid]}
+              tracksViewChanges={
+                Platform.OS === "android"
+                  ? true
+                  : Boolean(user.avatarUrl) && !markerLoaded[uid]
+              }
               style={styles.markerContainer}
               zIndex={900}
               onPress={() => focusFriend(uid, user)}
@@ -826,7 +834,6 @@ export default function MapScreen({ navigation }) {
           </TouchableOpacity>
         </View>
       )}
-
 
       {/* Bottom controls - Bump style */}
       {!selectedUser && (
@@ -1424,7 +1431,9 @@ const styles = StyleSheet.create({
     bottom: 44,
     left: "50%",
     transform: [{ translateX: -50 }],
-    width: 100,
+    paddingHorizontal: 12,
+    minWidth: 60,
+    maxWidth: 160,
     backgroundColor: COLORS.bgCard,
     borderRadius: 12,
     paddingHorizontal: 8,
@@ -1440,8 +1449,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   myMarkerNoteText: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "700",
+    marginLeft: -20,
     color: COLORS.textPrimary,
     textAlign: "center",
     lineHeight: 13,
@@ -1471,8 +1481,8 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.45)",
   },
   markerContainer: {
-    width: 100,
-    height: 145,
+    width: 50,
+    height: 50,
     alignItems: "center",
     justifyContent: "center",
   },
