@@ -592,8 +592,6 @@ export default function MapScreen({ navigation }) {
         >
           {/* Always-visible marker: blue dot + ring + avatar or initials */}
           <View style={styles.myLocationWrap}>
-            <View style={styles.myLocationDot} />
-            <View style={styles.myLocationRing} />
             {/* My note bubble */}
             {myNote &&
             myNoteAt &&
@@ -1100,23 +1098,24 @@ const styles = StyleSheet.create({
     zIndex: 40,
   },
   headerCard: {
-    backgroundColor: "rgba(255,255,255,0.95)",
-    borderRadius: 24,
-    padding: 20,
-    ...SHADOW.card,
+    backgroundColor: "rgba(20, 20, 22, 0.85)",
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.05)",
   },
   headerLabel: {
     color: COLORS.accent,
-    fontSize: 11,
-    fontWeight: "900",
-    letterSpacing: 1.5,
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 1.2,
     marginBottom: 4,
   },
   headerCity: {
-    color: COLORS.textPrimary,
-    fontSize: 28,
+    color: COLORS.white,
+    fontSize: 22,
     fontWeight: "900",
-    letterSpacing: -1,
+    letterSpacing: -0.5,
     marginBottom: 12,
   },
   headerStats: {
@@ -1125,18 +1124,18 @@ const styles = StyleSheet.create({
   },
   statBadge: {
     flex: 1,
-    backgroundColor: COLORS.bgSoft,
-    borderRadius: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
     alignItems: "center",
   },
   statBadgePink: {
-    backgroundColor: "rgba(236,72,153,0.1)",
+    backgroundColor: "rgba(236,72,153,0.15)",
   },
   statNumber: {
     color: COLORS.accent,
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "900",
     marginBottom: 2,
   },
@@ -1150,12 +1149,14 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   cameraButton: {
-    backgroundColor: COLORS.ink,
-    borderRadius: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    backgroundColor: "rgba(20, 20, 22, 0.9)",
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.05)",
   },
   cameraText: {
     color: COLORS.white,
@@ -1163,7 +1164,7 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     letterSpacing: 0.5,
     textAlign: "center",
-    lineHeight: 14,
+    marginTop: 2,
   },
 
   // Right buttons
@@ -1174,13 +1175,14 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   roundButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: COLORS.white,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "rgba(30, 30, 32, 0.9)",
     alignItems: "center",
     justifyContent: "center",
-    ...SHADOW.card,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.05)",
   },
 
   // Bottom controls
@@ -1193,21 +1195,23 @@ const styles = StyleSheet.create({
     zIndex: 35,
   },
   controlButton: {
-    height: 48,
-    paddingHorizontal: 20,
-    borderRadius: 24,
-    backgroundColor: COLORS.white,
+    height: 44,
+    paddingHorizontal: 16,
+    borderRadius: 22,
+    backgroundColor: "rgba(30,30,32,0.9)",
     alignItems: "center",
     justifyContent: "center",
-    ...SHADOW.card,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.05)",
   },
   controlButtonActive: {
-    backgroundColor: COLORS.ink,
+    backgroundColor: COLORS.accent,
+    borderColor: COLORS.accent,
   },
   controlText: {
-    color: COLORS.textPrimary,
-    fontSize: 14,
-    fontWeight: "800",
+    color: "rgba(255,255,255,0.6)",
+    fontSize: 13,
+    fontWeight: "700",
   },
   controlTextActive: {
     color: COLORS.white,
@@ -1228,22 +1232,24 @@ const styles = StyleSheet.create({
   },
   followButton: {
     flex: 1,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: COLORS.white,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(30,30,32,0.9)",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    ...SHADOW.card,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.05)",
   },
   followButtonActive: {
     backgroundColor: COLORS.accent,
+    borderColor: COLORS.accent,
   },
   followText: {
-    color: COLORS.white,
+    color: "rgba(255,255,255,0.8)",
     fontSize: 14,
-    fontWeight: "900",
+    fontWeight: "700",
   },
   // Moment pin
   momentPin: {
@@ -1297,27 +1303,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  myLocationDot: {
-    position: "absolute",
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: COLORS.me,
-    shadowColor: COLORS.me,
-    shadowOpacity: 0.6,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 8,
-  },
-  myLocationRing: {
-    position: "absolute",
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    borderWidth: 2.5,
-    borderColor: COLORS.me,
-    opacity: 0.3,
-  },
+
   myAvatarOnMap: {
     width: 56,
     height: 56,
