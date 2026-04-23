@@ -2,26 +2,16 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
   KeyboardAvoidingView, Platform, Alert, ActivityIndicator,
-  Animated, ScrollView, Dimensions,
+  Animated, ScrollView
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { User, Mail, Phone, Lock, Hash, MapPin, KeyRound, ChevronRight, AtSign, CheckCircle2 } from 'lucide-react-native';
 import { authService } from '../../../infrastructure/firebase/authService';
+import { COLORS, SPACING, SHADOW, RADIUS } from '../../theme';
 
-const { height: SCREEN_H } = Dimensions.get('window');
-
-function Blobs() {
-  return (
-    <>
-      <View style={[s.blob, { top: -80, left: -60, width: 220, height: 220, backgroundColor: 'rgba(139,92,246,0.18)' }]} />
-      <View style={[s.blob, { top: SCREEN_H * 0.4, right: -70, width: 180, height: 180, backgroundColor: 'rgba(232,72,229,0.14)' }]} />
-      <View style={[s.blob, { bottom: 40, left: -40, width: 150, height: 150, backgroundColor: 'rgba(236,72,153,0.12)' }]} />
-    </>
-  );
-}
-
-function GlassInput({ icon, placeholder, value, onChangeText, secureTextEntry, keyboardType, autoCapitalize, maxLength }) {
+function SolidInput({ icon: Icon, placeholder, value, onChangeText, secureTextEntry, keyboardType, autoCapitalize, maxLength }) {
   const [focused, setFocused] = useState(false);
   const borderAnim = useRef(new Animated.Value(0)).current;
+
   const onFocus = () => {
     setFocused(true);
     Animated.timing(borderAnim, { toValue: 1, duration: 200, useNativeDriver: false }).start();
@@ -30,17 +20,19 @@ function GlassInput({ icon, placeholder, value, onChangeText, secureTextEntry, k
     setFocused(false);
     Animated.timing(borderAnim, { toValue: 0, duration: 200, useNativeDriver: false }).start();
   };
+
   const borderColor = borderAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: ['rgba(255,255,255,0.1)', 'rgba(232,72,229,0.7)'],
+    outputRange: [COLORS.inkSoft, COLORS.accent],
   });
+
   return (
-    <Animated.View style={[s.inputBox, { borderColor }]}>
-      <Text style={s.inputIcon}>{icon}</Text>
+    <Animated.View style={[styles.inputBox, { borderColor }]}>
+      <Icon color={focused ? COLORS.accent : COLORS.textMuted} size={20} style={{ marginRight: 12 }} />
       <TextInput
-        style={s.inputText}
+        style={styles.inputText}
         placeholder={placeholder}
-        placeholderTextColor="rgba(255,255,255,0.35)"
+        placeholderTextColor={COLORS.textMuted}
         value={value}
         onChangeText={onChangeText}
         secureTextEntry={secureTextEntry}
@@ -49,26 +41,12 @@ function GlassInput({ icon, placeholder, value, onChangeText, secureTextEntry, k
         maxLength={maxLength}
         onFocus={onFocus}
         onBlur={onBlur}
+        selectionColor={COLORS.accent}
       />
     </Animated.View>
   );
 }
 
-// ── Tabs ──────────────────────────────────────────────────────────────────
-function TabToggle({ isOtpSent }) {
-  return (
-    <View style={s.tabRow}>
-      <View style={[s.tab, !isOtpSent && s.tabActive]}>
-        <Text style={[s.tabText, !isOtpSent && s.tabTextActive]}>📋 Thông tin</Text>
-      </View>
-      <View style={[s.tab, isOtpSent && s.tabActive]}>
-        <Text style={[s.tabText, isOtpSent && s.tabTextActive]}>✉️ Xác thực OTP</Text>
-      </View>
-    </View>
-  );
-}
-
-// ── Main RegisterScreen ───────────────────────────────────────────────────
 const RegisterScreen = ({ navigation }) => {
   const [fullName, setFullName] = useState('');
   const [username, setUsername] = useState('');
@@ -84,29 +62,25 @@ const RegisterScreen = ({ navigation }) => {
   const fadeIn = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(slideUp, { toValue: 0, duration: 600, useNativeDriver: true }),
-      Animated.timing(fadeIn, { toValue: 1, duration: 600, useNativeDriver: true }),
+      Animated.timing(slideUp, { toValue: 0, duration: 500, useNativeDriver: true }),
+      Animated.timing(fadeIn, { toValue: 1, duration: 500, useNativeDriver: true }),
     ]).start();
   }, []);
 
   const handleRequestOtp = async () => {
     if (!fullName || !username || !email || !password || !phone) {
-      Alert.alert('Lỗi', 'Vui lòng điền đầy đủ thông tin');
-      return;
+      Alert.alert('Chưa đầy đủ', 'Vui lòng điền đủ mọi thông tin'); return;
     }
     const usernameRegex = /^[a-zA-Z0-9_.-]{3,20}$/;
     if (!usernameRegex.test(username)) {
-      Alert.alert('Lỗi', 'Username không hợp lệ (3-20 ký tự, không dấu cách)');
-      return;
+      Alert.alert('Lỗi', 'Username không hợp lệ (3-20 ký tự, không dấu cách)'); return;
     }
     if (password !== confirmPassword) {
-      Alert.alert('Lỗi', 'Mật khẩu xác nhận không khớp');
-      return;
+      Alert.alert('Lỗi', 'Mật khẩu xác nhận không khớp'); return;
     }
     const emailRegex = /\S+@\S+\.\S+/;
     if (!emailRegex.test(email)) {
-      Alert.alert('Lỗi', 'Email không hợp lệ');
-      return;
+      Alert.alert('Lỗi', 'Email không hợp lệ'); return;
     }
     setLoading(true);
     try {
@@ -125,79 +99,71 @@ const RegisterScreen = ({ navigation }) => {
     setLoading(true);
     try {
       await authService.verifyAndRegister(email, password, fullName, phone, username, otp);
-      Alert.alert('Thành công 🎉', 'Tài khoản đã được tạo thành công!');
+      Alert.alert('Tuyệt vời', 'Tài khoản đã được tạo thành công! Vui lòng đăng nhập.');
+      navigation.navigate('Login');
     } catch (error) {
-      Alert.alert('Đăng ký thất bại', error.message);
+      Alert.alert('Lỗi đăng ký', error.message);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <View style={s.root}>
-      <LinearGradient colors={['#0D0D1A', '#12001A', '#0D0D1A']} style={StyleSheet.absoluteFill} />
-      <Blobs />
-
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
+    <View style={styles.root}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.kav}>
+        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <Animated.View style={[{ transform: [{ translateY: slideUp }], opacity: fadeIn }]}>
 
             {/* Header */}
-            <View style={s.header}>
-              <LinearGradient colors={['#E848E5', '#8B5CF6']} style={s.logoGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-                <Text style={{ fontSize: 28 }}>👤</Text>
-              </LinearGradient>
-              <Text style={s.appName}>GeoLink</Text>
-              <Text style={s.tagline}>
-                {isOtpSent ? `Mã đã gửi tới ${email}` : 'Tạo tài khoản mới'}
+            <View style={styles.header}>
+              <View style={styles.iconWrap}>
+                {isOtpSent ? (
+                  <CheckCircle2 color={COLORS.ink} size={36} strokeWidth={2.5} />
+                ) : (
+                  <MapPin color={COLORS.ink} size={36} strokeWidth={2.5} />
+                )}
+              </View>
+              <Text style={styles.appName}>Join GeoLink</Text>
+              <Text style={styles.tagline}>
+                {isOtpSent ? `We sent a code to ${email}` : 'Get on the map with your friends.'}
               </Text>
             </View>
 
-            {/* Tab indicator */}
-            <TabToggle isOtpSent={isOtpSent} />
-
-            {/* Card */}
-            <View style={s.card}>
+            {/* Form */}
+            <View style={styles.formContainer}>
               {!isOtpSent ? (
                 <>
-                  <GlassInput icon="👤" placeholder="Họ và tên" value={fullName} onChangeText={setFullName} autoCapitalize="words" />
-                  <GlassInput icon="@" placeholder="Username" value={username} onChangeText={setUsername} autoCapitalize="none" />
-                  <GlassInput icon="✉️" placeholder="Email" value={email} onChangeText={setEmail} keyboardType="email-address" />
-                  <GlassInput icon="📞" placeholder="Số điện thoại" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
-                  <GlassInput icon="🔒" placeholder="Mật khẩu" value={password} onChangeText={setPassword} secureTextEntry />
-                  <GlassInput icon="🔒" placeholder="Xác nhận mật khẩu" value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry />
+                  <SolidInput icon={User} placeholder="Full name" value={fullName} onChangeText={setFullName} autoCapitalize="words" />
+                  <SolidInput icon={AtSign} placeholder="Username" value={username} onChangeText={setUsername} autoCapitalize="none" />
+                  <SolidInput icon={Mail} placeholder="Email" value={email} onChangeText={setEmail} keyboardType="email-address" />
+                  <SolidInput icon={Phone} placeholder="Phone number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
+                  <SolidInput icon={Lock} placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry />
+                  <SolidInput icon={Lock} placeholder="Confirm password" value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry />
 
-                  <TouchableOpacity style={[s.primaryBtn, loading && { opacity: 0.7 }]} onPress={handleRequestOtp} disabled={loading} activeOpacity={0.85}>
-                    <LinearGradient colors={['#E848E5', '#8B5CF6']} style={s.primaryBtnGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
-                      {loading ? <ActivityIndicator color="#FFF" /> : <Text style={s.primaryBtnText}>Gửi mã xác thực →</Text>}
-                    </LinearGradient>
+                  <TouchableOpacity style={[styles.primaryBtn, { marginTop: 12 }, loading && { opacity: 0.7 }]} onPress={handleRequestOtp} disabled={loading} activeOpacity={0.8}>
+                    {loading ? <ActivityIndicator color={COLORS.white} /> : (
+                      <>
+                        <Text style={styles.primaryBtnText}>Continue</Text>
+                        <ChevronRight color={COLORS.white} size={20} />
+                      </>
+                    )}
                   </TouchableOpacity>
                 </>
               ) : (
                 <>
-                  {/* OTP Step */}
-                  <Text style={s.otpHint}>Nhập mã 6 chữ số đã gửi tới email của bạn</Text>
+                  <SolidInput icon={KeyRound} placeholder="6-digit OTP code" value={otp} onChangeText={setOtp} keyboardType="number-pad" maxLength={6} />
 
-                  <GlassInput
-                    icon="🔑" placeholder="Nhập mã OTP (6 chữ số)"
-                    value={otp} onChangeText={setOtp}
-                    keyboardType="number-pad" maxLength={6}
-                  />
-
-                  <TouchableOpacity style={[s.primaryBtn, loading && { opacity: 0.7 }]} onPress={handleVerifyAndRegister} disabled={loading} activeOpacity={0.85}>
-                    <LinearGradient colors={['#E848E5', '#8B5CF6']} style={s.primaryBtnGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
-                      {loading ? <ActivityIndicator color="#FFF" /> : <Text style={s.primaryBtnText}>Xác nhận & Đăng ký 🎉</Text>}
-                    </LinearGradient>
+                  <TouchableOpacity style={[styles.primaryBtn, { marginTop: 12 }, loading && { opacity: 0.7 }]} onPress={handleVerifyAndRegister} disabled={loading} activeOpacity={0.8}>
+                    {loading ? <ActivityIndicator color={COLORS.white} /> : <Text style={styles.primaryBtnText}>Verify & Create Account</Text>}
                   </TouchableOpacity>
 
-                  <View style={s.resendRow}>
-                    <Text style={s.resendGray}>Chưa nhận được? </Text>
+                  <View style={styles.resendRow}>
                     <TouchableOpacity onPress={handleRequestOtp} disabled={loading}>
-                      <Text style={s.resendPink}>Gửi lại</Text>
+                      <Text style={styles.resendAccent}>Resend Code</Text>
                     </TouchableOpacity>
-                    <Text style={s.resendGray}> · </Text>
+                    <View style={styles.dot} />
                     <TouchableOpacity onPress={() => setIsOtpSent(false)}>
-                      <Text style={s.resendPink}>Sửa thông tin</Text>
+                      <Text style={styles.resendAccent}>Edit Details</Text>
                     </TouchableOpacity>
                   </View>
                 </>
@@ -205,12 +171,13 @@ const RegisterScreen = ({ navigation }) => {
             </View>
 
             {/* Footer */}
-            <View style={s.footerRow}>
-              <Text style={s.footerGray}>Đã có tài khoản? </Text>
-              <TouchableOpacity onPress={() => navigation.navigate('Login')}>
-                <Text style={s.footerPink}>Đăng nhập</Text>
+            <View style={styles.footerRow}>
+              <Text style={styles.footerGray}>Already on GeoLink? </Text>
+              <TouchableOpacity onPress={() => navigation.navigate('Login')} activeOpacity={0.7}>
+                <Text style={styles.footerHighlight}>Log in here</Text>
               </TouchableOpacity>
             </View>
+
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -218,69 +185,53 @@ const RegisterScreen = ({ navigation }) => {
   );
 };
 
-const s = StyleSheet.create({
-  root: { flex: 1 },
-  scroll: { paddingHorizontal: 24, paddingTop: 60, paddingBottom: 40 },
-  blob: { position: 'absolute', borderRadius: 999 },
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: COLORS.ink },
+  kav: { flex: 1 },
+  scroll: { paddingHorizontal: SPACING.xl, paddingTop: 80, paddingBottom: 40 },
 
-  // Header
-  header: { alignItems: 'center', marginBottom: 24 },
-  logoGrad: {
-    width: 68, height: 68, borderRadius: 22,
+  header: { alignItems: 'center', marginBottom: 40 },
+  iconWrap: {
+    width: 64, height: 64, borderRadius: 20,
+    backgroundColor: COLORS.accent,
     justifyContent: 'center', alignItems: 'center',
-    marginBottom: 12,
-    elevation: 10, shadowColor: '#E848E5',
-    shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.5, shadowRadius: 14,
-  },
-  appName: { color: '#FFF', fontSize: 26, fontWeight: '900', letterSpacing: 1 },
-  tagline: { color: 'rgba(255,255,255,0.45)', fontSize: 13, marginTop: 4, textAlign: 'center' },
-
-  // Tabs
-  tabRow: { flexDirection: 'row', backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 14, padding: 4, marginBottom: 20 },
-  tab: { flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center' },
-  tabActive: { backgroundColor: 'rgba(232,72,229,0.2)', borderWidth: 1, borderColor: 'rgba(232,72,229,0.4)' },
-  tabText: { color: 'rgba(255,255,255,0.35)', fontSize: 13, fontWeight: '600' },
-  tabTextActive: { color: '#E848E5' },
-
-  // Card
-  card: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 28, padding: 22,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
     marginBottom: 20,
+    transform: [{ rotate: '5deg' }],
+    ...SHADOW.accent,
   },
+  appName: { color: COLORS.white, fontSize: 32, fontWeight: '900', letterSpacing: -1 },
+  tagline: { color: COLORS.textMuted, fontSize: 15, marginTop: 8, fontWeight: '500', textAlign: 'center' },
 
-  // Input
+  formContainer: { width: '100%' },
   inputBox: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.07)',
-    borderRadius: 14, borderWidth: 1.5,
-    paddingHorizontal: 14, height: 52, marginBottom: 12,
+    backgroundColor: COLORS.inkSoft,
+    borderRadius: RADIUS.md,
+    borderWidth: 2,
+    paddingHorizontal: 16,
+    height: 56,
+    marginBottom: 12,
   },
-  inputIcon: { fontSize: 17, marginRight: 10 },
-  inputText: { flex: 1, color: '#FFF', fontSize: 15 },
+  inputText: { flex: 1, color: COLORS.white, fontSize: 16, fontWeight: '600' },
 
-  // OTP hint
-  otpHint: { color: 'rgba(255,255,255,0.5)', fontSize: 13, textAlign: 'center', marginBottom: 18, lineHeight: 20 },
-
-  // Primary button
   primaryBtn: {
-    borderRadius: 16, overflow: 'hidden', marginTop: 8, marginBottom: 12,
-    elevation: 8, shadowColor: '#E848E5',
-    shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.5, shadowRadius: 12,
+    flexDirection: 'row',
+    height: 56,
+    borderRadius: RADIUS.full,
+    backgroundColor: COLORS.accent,
+    alignItems: 'center', justifyContent: 'center',
+    gap: 8,
+    ...SHADOW.accent,
   },
-  primaryBtnGrad: { height: 54, justifyContent: 'center', alignItems: 'center' },
-  primaryBtnText: { color: '#FFF', fontSize: 16, fontWeight: '800' },
+  primaryBtnText: { color: COLORS.white, fontSize: 18, fontWeight: '800' },
 
-  // Resend
-  resendRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 4 },
-  resendGray: { color: 'rgba(255,255,255,0.4)', fontSize: 13 },
-  resendPink: { color: '#E848E5', fontSize: 13, fontWeight: '700' },
+  resendRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 24, gap: 12 },
+  resendAccent: { color: COLORS.accent, fontSize: 14, fontWeight: '700' },
+  dot: { width: 4, height: 4, borderRadius: 2, backgroundColor: COLORS.textMuted },
 
-  // Footer
-  footerRow: { flexDirection: 'row', justifyContent: 'center' },
-  footerGray: { color: 'rgba(255,255,255,0.45)', fontSize: 14 },
-  footerPink: { color: '#E848E5', fontSize: 14, fontWeight: '700' },
+  footerRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 40 },
+  footerGray: { color: COLORS.textMuted, fontSize: 15, fontWeight: '500' },
+  footerHighlight: { color: COLORS.white, fontSize: 15, fontWeight: '800', textDecorationLine: 'underline' },
 });
 
 export default RegisterScreen;

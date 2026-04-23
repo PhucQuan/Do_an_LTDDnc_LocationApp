@@ -764,6 +764,7 @@ export default function MapScreen({ navigation }) {
         </View>
       )}
 
+
       {/* Bottom controls - Bump style */}
       {!selectedUser && (
         <View style={[styles.bottomControls, { bottom: overlayBottom }]}>
@@ -1262,7 +1263,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "900",
   },
-
   // Moment pin
   momentPin: {
     width: 44,

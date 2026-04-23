@@ -59,6 +59,14 @@ service cloud.firestore {
       allow update, delete: if isOwner(resource.data.userId);
     }
 
+    match /register_otps/{email} {
+      allow read, write: if true;
+    }
+
+    match /password_resets/{email} {
+      allow read, write: if true;
+    }
+
     match /groups_visibility/{visibilityId} {
       allow read, write: if signedIn();
     }

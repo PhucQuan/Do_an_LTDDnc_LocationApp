@@ -2,26 +2,13 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
   KeyboardAvoidingView, Platform, Alert, ActivityIndicator,
-  Animated, Dimensions,
+  Animated,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { Mail, Lock, MapPin, ChevronRight } from 'lucide-react-native';
 import { authService } from '../../../infrastructure/firebase/authService';
+import { COLORS, SPACING, SHADOW, RADIUS } from '../../theme';
 
-const { height: SCREEN_H } = Dimensions.get('window');
-
-// ── Floating decorative blobs ──────────────────────────────────────────────
-function Blobs() {
-  return (
-    <>
-      <View style={[styles.blob, { top: -60, right: -60, width: 200, height: 200, backgroundColor: 'rgba(232,72,229,0.18)' }]} />
-      <View style={[styles.blob, { top: SCREEN_H * 0.25, left: -80, width: 160, height: 160, backgroundColor: 'rgba(139,92,246,0.15)' }]} />
-      <View style={[styles.blob, { bottom: 80, right: -50, width: 180, height: 180, backgroundColor: 'rgba(236,72,153,0.12)' }]} />
-    </>
-  );
-}
-
-// ── Input Field ───────────────────────────────────────────────────────────
-function GlassInput({ icon, placeholder, value, onChangeText, secureTextEntry, keyboardType, autoCapitalize }) {
+function SolidInput({ icon: Icon, placeholder, value, onChangeText, secureTextEntry, keyboardType, autoCapitalize }) {
   const [focused, setFocused] = useState(false);
   const borderAnim = useRef(new Animated.Value(0)).current;
 
@@ -36,16 +23,16 @@ function GlassInput({ icon, placeholder, value, onChangeText, secureTextEntry, k
 
   const borderColor = borderAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: ['rgba(255,255,255,0.1)', 'rgba(232,72,229,0.7)'],
+    outputRange: [COLORS.inkSoft, COLORS.accent],
   });
 
   return (
     <Animated.View style={[styles.inputBox, { borderColor }]}>
-      <Text style={styles.inputIcon}>{icon}</Text>
+      <Icon color={focused ? COLORS.accent : COLORS.textMuted} size={20} style={{ marginRight: 12 }} />
       <TextInput
         style={styles.inputText}
         placeholder={placeholder}
-        placeholderTextColor="rgba(255,255,255,0.35)"
+        placeholderTextColor={COLORS.textMuted}
         value={value}
         onChangeText={onChangeText}
         secureTextEntry={secureTextEntry}
@@ -53,24 +40,23 @@ function GlassInput({ icon, placeholder, value, onChangeText, secureTextEntry, k
         autoCapitalize={autoCapitalize || 'none'}
         onFocus={onFocus}
         onBlur={onBlur}
+        selectionColor={COLORS.accent}
       />
     </Animated.View>
   );
 }
 
-// ── Main LoginScreen ──────────────────────────────────────────────────────
 const LoginScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Entry animation
   const slideUp = useRef(new Animated.Value(40)).current;
   const fadeIn = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(slideUp, { toValue: 0, duration: 600, useNativeDriver: true }),
-      Animated.timing(fadeIn, { toValue: 1, duration: 600, useNativeDriver: true }),
+      Animated.timing(slideUp, { toValue: 0, duration: 500, useNativeDriver: true }),
+      Animated.timing(fadeIn, { toValue: 1, duration: 500, useNativeDriver: true }),
     ]).start();
   }, []);
 
@@ -91,154 +77,105 @@ const LoginScreen = ({ navigation }) => {
 
   return (
     <View style={styles.root}>
-      {/* Dark background */}
-      <LinearGradient colors={['#0D0D1A', '#12001A', '#0D0D1A']} style={StyleSheet.absoluteFill} />
-      <Blobs />
-
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.kav}>
         <Animated.View style={[styles.content, { transform: [{ translateY: slideUp }], opacity: fadeIn }]}>
 
-          {/* Logo */}
-          <View style={styles.logoWrap}>
-            <LinearGradient colors={['#E848E5', '#8B5CF6']} style={styles.logoGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-              <Text style={styles.logoEmoji}>📍</Text>
-            </LinearGradient>
+          {/* Logo & Header */}
+          <View style={styles.header}>
+            <View style={styles.iconWrap}>
+              <MapPin color={COLORS.ink} size={36} strokeWidth={2.5} />
+            </View>
             <Text style={styles.appName}>GeoLink</Text>
-            <Text style={styles.tagline}>Chia sẻ vị trí với bạn bè realtime</Text>
+            <Text style={styles.tagline}>Welcome back. Ready to explore?</Text>
           </View>
 
-          {/* Card */}
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Đăng nhập</Text>
+          {/* Form */}
+          <View style={styles.formContainer}>
+            <SolidInput icon={Mail} placeholder="Email address" value={email} onChangeText={setEmail} keyboardType="email-address" />
+            <SolidInput icon={Lock} placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry />
 
-            <GlassInput icon="✉️" placeholder="Email" value={email} onChangeText={setEmail} keyboardType="email-address" />
-            <GlassInput icon="🔒" placeholder="Mật khẩu" value={password} onChangeText={setPassword} secureTextEntry />
-
-            <TouchableOpacity
-              style={styles.forgotBtn}
-              onPress={() => navigation.navigate('ForgotPassword')}
-            >
-              <Text style={styles.forgotText}>Quên mật khẩu?</Text>
+            <TouchableOpacity style={styles.forgotBtn} onPress={() => navigation.navigate('ForgotPassword')}>
+              <Text style={styles.forgotText}>Forgot password?</Text>
             </TouchableOpacity>
 
-            {/* Primary button */}
             <TouchableOpacity
               style={[styles.primaryBtn, loading && { opacity: 0.7 }]}
               onPress={handleLogin}
               disabled={loading}
-              activeOpacity={0.85}
+              activeOpacity={0.8}
             >
-              <LinearGradient colors={['#E848E5', '#8B5CF6']} style={styles.primaryBtnGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
-                {loading
-                  ? <ActivityIndicator color="#FFF" />
-                  : <Text style={styles.primaryBtnText}>Đăng nhập →</Text>}
-              </LinearGradient>
+              {loading ? (
+                <ActivityIndicator color={COLORS.white} />
+              ) : (
+                <>
+                  <Text style={styles.primaryBtnText}>Log in</Text>
+                  <ChevronRight color={COLORS.white} size={20} />
+                </>
+              )}
             </TouchableOpacity>
-
-            {/* Divider */}
-            <View style={styles.divRow}>
-              <View style={styles.divLine} />
-              <Text style={styles.divText}>hoặc tiếp tục với</Text>
-              <View style={styles.divLine} />
-            </View>
-
-            {/* Social */}
-            <View style={styles.socialRow}>
-              {['🍎', '🌐', 'f'].map((ic, i) => (
-                <TouchableOpacity key={i} style={styles.socialBtn}>
-                  <Text style={{ fontSize: 18 }}>{ic}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
           </View>
 
           {/* Footer */}
           <View style={styles.footerRow}>
-            <Text style={styles.footerGray}>Chưa có tài khoản? </Text>
-            <TouchableOpacity onPress={() => navigation.navigate('Register')}>
-              <Text style={styles.footerPink}>Đăng ký ngay</Text>
+            <Text style={styles.footerGray}>New to GeoLink? </Text>
+            <TouchableOpacity onPress={() => navigation.navigate('Register')} activeOpacity={0.7}>
+              <Text style={styles.footerHighlight}>Create an account</Text>
             </TouchableOpacity>
           </View>
+
         </Animated.View>
       </KeyboardAvoidingView>
     </View>
   );
 };
 
-// ─── Styles ────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  root: { flex: 1 },
+  root: { flex: 1, backgroundColor: COLORS.ink },
   kav: { flex: 1 },
-  content: { flex: 1, paddingHorizontal: 24, justifyContent: 'center', paddingTop: 40 },
+  content: { flex: 1, paddingHorizontal: SPACING.xl, justifyContent: 'center' },
 
-  // Blobs
-  blob: { position: 'absolute', borderRadius: 999 },
-
-  // Logo
-  logoWrap: { alignItems: 'center', marginBottom: 32 },
-  logoGrad: {
+  header: { alignItems: 'center', marginBottom: 48 },
+  iconWrap: {
     width: 72, height: 72, borderRadius: 24,
+    backgroundColor: COLORS.accent,
     justifyContent: 'center', alignItems: 'center',
-    marginBottom: 12,
-    elevation: 10,
-    shadowColor: '#E848E5',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5, shadowRadius: 16,
+    marginBottom: 20,
+    transform: [{ rotate: '-5deg' }],
+    ...SHADOW.accent,
   },
-  logoEmoji: { fontSize: 32 },
-  appName: { color: '#FFFFFF', fontSize: 28, fontWeight: '900', letterSpacing: 1 },
-  tagline: { color: 'rgba(255,255,255,0.45)', fontSize: 13, marginTop: 4 },
+  appName: { color: COLORS.white, fontSize: 32, fontWeight: '900', letterSpacing: -1 },
+  tagline: { color: COLORS.textMuted, fontSize: 15, marginTop: 8, fontWeight: '500' },
 
-  // Card
-  card: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 28,
-    padding: 24,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-  },
-  cardTitle: { color: '#FFF', fontSize: 22, fontWeight: '800', marginBottom: 20 },
-
-  // Input
+  formContainer: { width: '100%' },
   inputBox: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.07)',
-    borderRadius: 14,
-    borderWidth: 1.5,
-    paddingHorizontal: 14,
-    height: 54,
-    marginBottom: 14,
+    backgroundColor: COLORS.inkSoft,
+    borderRadius: RADIUS.md,
+    borderWidth: 2,
+    paddingHorizontal: 16,
+    height: 56,
+    marginBottom: 16,
   },
-  inputIcon: { fontSize: 18, marginRight: 10 },
-  inputText: { flex: 1, color: '#FFF', fontSize: 15 },
+  inputText: { flex: 1, color: COLORS.white, fontSize: 16, fontWeight: '600' },
 
-  // Forgot
-  forgotBtn: { alignSelf: 'flex-end', marginBottom: 20 },
-  forgotText: { color: '#E848E5', fontSize: 13, fontWeight: '600' },
+  forgotBtn: { alignSelf: 'flex-end', marginBottom: 32 },
+  forgotText: { color: COLORS.accent, fontSize: 14, fontWeight: '700' },
 
-  // Primary button
-  primaryBtn: { borderRadius: 16, overflow: 'hidden', marginBottom: 22, elevation: 8, shadowColor: '#E848E5', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.5, shadowRadius: 12 },
-  primaryBtnGrad: { height: 54, justifyContent: 'center', alignItems: 'center' },
-  primaryBtnText: { color: '#FFF', fontSize: 17, fontWeight: '800', letterSpacing: 0.5 },
-
-  // Divider
-  divRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 18 },
-  divLine: { flex: 1, height: 1, backgroundColor: 'rgba(255,255,255,0.1)' },
-  divText: { color: 'rgba(255,255,255,0.35)', fontSize: 12, paddingHorizontal: 12 },
-
-  // Social
-  socialRow: { flexDirection: 'row', justifyContent: 'center', gap: 16 },
-  socialBtn: {
-    width: 52, height: 52, borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.07)',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
-    justifyContent: 'center', alignItems: 'center',
+  primaryBtn: {
+    flexDirection: 'row',
+    height: 56,
+    borderRadius: RADIUS.full,
+    backgroundColor: COLORS.accent,
+    alignItems: 'center', justifyContent: 'center',
+    gap: 8,
+    ...SHADOW.accent,
   },
+  primaryBtnText: { color: COLORS.white, fontSize: 18, fontWeight: '800' },
 
-  // Footer
-  footerRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 24 },
-  footerGray: { color: 'rgba(255,255,255,0.45)', fontSize: 14 },
-  footerPink: { color: '#E848E5', fontSize: 14, fontWeight: '700' },
+  footerRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 48 },
+  footerGray: { color: COLORS.textMuted, fontSize: 15, fontWeight: '500' },
+  footerHighlight: { color: COLORS.white, fontSize: 15, fontWeight: '800', textDecorationLine: 'underline' },
 });
 
 export default LoginScreen;
+
