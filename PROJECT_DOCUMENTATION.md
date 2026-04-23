@@ -29,7 +29,13 @@ Hệ thống sử dụng **Firebase** làm nền tảng Backend-as-a-Service (Ba
 - **Firebase Authentication:** Quản lý đăng ký, đăng nhập an toàn với các phương thức Email/Password, Social Login.
 - **Cloud Firestore:** Cơ sở dữ liệu NoSQL dạng tài liệu, dùng để lưu trữ dữ liệu có cấu trúc như thông tin người dùng, lịch sử chat và danh sách bạn bè.
 - **Realtime Database (RTDB):** Lưu trữ tọa độ vị trí vì RTDB có tốc độ đồng bộ nhanh hơn Firestore, phù hợp với dữ liệu biến động liên tục.
-- **Firebase Storage:** Lưu trữ hình ảnh đại diện (avatar) và các phương tiện truyền thông trong chat.
+- **Firebase Storage:** Lưu trữ một số file tĩnh và cấu hình nhỏ.
+
+### 2.3. Supabase - Object Storage
+Hệ thống tích hợp **Supabase Storage** để quản lý các tệp tin đa phương tiện lớn, tận dụng tốc độ CDN và khả năng mở rộng:
+- **Avatars Bucket:** Lưu trữ ảnh đại diện của người dùng với độ phân giải cao.
+- **Moments Bucket:** Lưu trữ các hình ảnh "Khoảnh khắc" (Moments) mà người dùng chia sẻ trên bản đồ.
+- **Tốc độ:** Tối ưu hóa việc tải ảnh nhờ hạ tầng của Supabase, giúp giảm tải cho Firebase.
 
 ---
 
@@ -38,19 +44,21 @@ Hệ thống sử dụng **Firebase** làm nền tảng Backend-as-a-Service (Ba
 ### 3.1. Lược đồ Use Case chi tiết
 
 ```mermaid
-useCaseDiagram
-    actor "Người dùng" as U
-    actor "Hệ thống Firebase" as S
+flowchart TD
+    U["Người dùng"]
+    S["Hệ thống Firebase"]
+    SB["Supabase Storage"]
 
-    package "Hệ thống GeoLink" {
-        usecase "Đăng ký/Đăng nhập" as UC1
-        usecase "Xem bản đồ bạn bè" as UC2
-        usecase "Cập nhật vị trí tự động" as UC3
-        usecase "Nhắn tin Real-time" as UC4
-        usecase "Xem lịch sử Footprints" as UC5
-        usecase "Quản lý riêng tư (Ghost Mode)" as UC6
-        usecase "Gửi Emoji/Buzz" as UC7
-    }
+    subgraph "Hệ thống GeoLink"
+        UC1(["Đăng ký/Đăng nhập"])
+        UC2(["Xem bản đồ bạn bè"])
+        UC3(["Cập nhật vị trí tự động"])
+        UC4(["Nhắn tin Real-time"])
+        UC5(["Xem lịch sử Footprints"])
+        UC6(["Quản lý riêng tư (Ghost Mode)"])
+        UC7(["Gửi Emoji/Buzz"])
+        UC8(["Chia sẻ Khoảnh khắc (Images)"])
+    end
 
     U --> UC1
     U --> UC2
@@ -59,10 +67,13 @@ useCaseDiagram
     U --> UC5
     U --> UC6
     U --> UC7
+    U --> UC8
 
-    UC1 ..> S : Auth Service
-    UC3 ..> S : RTDB Update
-    UC4 ..> S : Firestore Sync
+    UC1 -.->|Auth Service| S
+    UC1 -.->|Upload Avatar| SB
+    UC3 -.->|RTDB Update| S
+    UC4 -.->|Firestore Sync| S
+    UC8 -.->|Store Photos| SB
 ```
 
 #### Mô tả chi tiết một số Use Case tiêu biểu:
@@ -119,6 +130,12 @@ Dùng để quản lý quan hệ 2 chiều.
 | /locations/{uid}/longitude | Number | Kinh độ |
 | /locations/{uid}/status | String | 'moving', 'still', 'running' |
 | /locations/{uid}/updatedAt | Timestamp | Thời gian cập nhật cuối |
+
+#### Supabase Storage (Object Storage)
+| Bucket | Content | Access Control |
+| :--- | :--- | :--- |
+| `avatars` | Ảnh đại diện người dùng | Public Read |
+| `moments` | Ảnh chia sẻ vị trí/khoảnh khắc | Public Read / Authenticated Write |
 
 ### 4.2. Cơ sở dữ liệu SQL tương đương (Dành cho báo cáo)
 

@@ -26,6 +26,8 @@
   - **Firebase Auth**: Quản lý người dùng.
   - **Cloud Firestore**: Lưu trữ dữ liệu cấu trúc, tin nhắn, lịch sử.
   - **Realtime Database**: Đồng bộ vị trí và tương tác cực nhanh.
+- **Object Storage**:
+  - **Supabase Storage**: Lưu trữ hình ảnh Avatar và Moments (Moments Bucket).
 - **Maps**: Google Maps API / Apple Maps qua `react-native-maps`.
 
 ---
@@ -34,13 +36,24 @@
 
 ### Use Case Diagram
 ```mermaid
-useCaseDiagram
-    actor User
-    User --> (View Map & Friends)
-    User --> (Share Real-time Location)
-    User --> (Chat with Friends)
-    User --> (View Travel History)
-    User --> (Ghost Mode Toggle)
+flowchart TD
+    User["User"]
+    
+    subgraph "GeoLink"
+        UC1(["View Map & Friends"])
+        UC2(["Share Real-time Location"])
+        UC3(["Chat with Friends"])
+        UC4(["View Travel History"])
+        UC5(["Ghost Mode Toggle"])
+        UC6(["Share Moments (Photos)"])
+    end
+
+    User --> UC1
+    User --> UC2
+    User --> UC3
+    User --> UC4
+    User --> UC5
+    User --> UC6
 ```
 
 ### Sequence Diagram (Location Sync)
