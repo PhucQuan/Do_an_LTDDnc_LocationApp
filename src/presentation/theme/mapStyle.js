@@ -3,7 +3,7 @@ export const MAP_STYLE = [
   { "elementType": "labels.text.stroke", "stylers": [{"color": "#12141A"}] },
   { "elementType": "labels.text.fill", "stylers": [{"color": "#748092"}] },
   { "featureType": "administrative.locality", "elementType": "labels.text.fill", "stylers": [{"color": "#c4ccdb"}] },
-  { "featureType": "poi", "stylers": [{"visibility": "off"}] },
+
   { "featureType": "road", "elementType": "geometry", "stylers": [{"color": "#1A1F2C"}] },
   { "featureType": "road", "elementType": "geometry.stroke", "stylers": [{"color": "#212838"}] },
   { "featureType": "road.highway", "elementType": "geometry", "stylers": [{"color": "#232A3B"}] },
