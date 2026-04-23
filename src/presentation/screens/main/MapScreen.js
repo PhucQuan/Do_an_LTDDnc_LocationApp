@@ -131,7 +131,7 @@ export default function MapScreen({ navigation }) {
   const [incomingInteraction, setIncomingInteraction] = useState(null);
   const [showMyCard, setShowMyCard] = useState(false);
   const [selectedFriendUid, setSelectedFriendUid] = useState(null);
-  const [mockMode, setMockMode] = useState(false);
+
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [myNote, setMyNote] = useState(null);
   const [myNoteAt, setMyNoteAt] = useState(null);
@@ -377,16 +377,9 @@ export default function MapScreen({ navigation }) {
     };
   }, []);
 
-  // Mock friends cho mục đích demo / test UI
-  const { friends: mockFriends, trails: mockTrails } = useMockFriends(
-    coords?.latitude ?? 10.8839,
-    coords?.longitude ?? 106.7804,
-    mockMode,
-  );
-
   const onlineUsers = useMemo(
-    () => Object.entries({ ...otherUsers, ...mockFriends }),
-    [otherUsers, mockFriends],
+    () => Object.entries(otherUsers),
+    [otherUsers],
   );
 
   const visibleMoments = useMemo(
@@ -412,12 +405,8 @@ export default function MapScreen({ navigation }) {
       }
     });
 
-    if (mockMode && mockTrails.length) {
-      nextFootprints.push(...mockTrails);
-    }
-
     return nextFootprints;
-  }, [currentName, footprints, friendTrails, localTrail, mockMode, mockTrails]);
+  }, [currentName, footprints, friendTrails, localTrail]);
 
   const focusFriend = (uid, user) => {
     setFollowCurrentUser(false);
@@ -784,14 +773,7 @@ export default function MapScreen({ navigation }) {
               Trail {showFootprints ? "on" : "off"}
             </Text>
           </TouchableOpacity>
-          {!mockMode && !onlineUsers.length ? (
-            <TouchableOpacity
-              style={styles.controlButtonDemo}
-              onPress={() => setMockMode(true)}
-            >
-              <Text style={styles.controlTextDemo}>Demo mode</Text>
-            </TouchableOpacity>
-          ) : null}
+
           <TouchableOpacity
             style={[
               styles.followButton,
