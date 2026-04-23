@@ -46,31 +46,31 @@ export function useVisibilityScope() {
     };
 
     const unsubscribeFriendships = onSnapshot(
-      query(collection(db, 'friendships'), where('status', '==', 'accepted')),
+      query(collection(db, "friendships"), where("status", "==", "accepted")),
       (snapshot) => {
         friendships = snapshot.docs
           .map((entry) => entry.data())
           .filter((entry) => entry.userId1 === uid || entry.userId2 === uid);
         sync();
-      }
+      },
     );
 
     const unsubscribeGroups = onSnapshot(
-      query(collection(db, 'groups'), where('members', 'array-contains', uid)),
+      query(collection(db, "groups"), where("members", "array-contains", uid)),
       (snapshot) => {
         groups = snapshot.docs.map((entry) => ({
           id: entry.id,
           ...entry.data(),
         }));
         sync();
-      }
+      },
     );
 
     return () => {
       unsubscribeFriendships();
       unsubscribeGroups();
     };
-  }, []);
+  }, [auth.currentUser?.uid]);
 
   return visibleUserIds;
 }

@@ -121,8 +121,8 @@ export default function FriendProfileScreen({ route, navigation }) {
       // Load location history (last 24 hours)
       const yesterday = Date.now() - 24 * 60 * 60 * 1000;
       const locationsQuery = query(
-        collection(db, 'locationHistory'),
-        where('userId', '==', friendUid),
+        collection(db, 'locations_history'),
+        where('uid', '==', friendUid),
         where('timestamp', '>=', yesterday),
         orderBy('timestamp', 'desc'),
         limit(100)

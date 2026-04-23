@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -8,19 +8,24 @@ import {
   Text,
   TouchableOpacity,
   View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Check, MapPin, Plus, UserPlus, Users, X, Zap } from 'lucide-react-native';
-import { collection, doc, getDoc, onSnapshot, query, where } from 'firebase/firestore';
-import { auth, db } from '../../../infrastructure/firebase/firebase';
-import { friendService } from '../../../infrastructure/firebase/friendService';
-import { chatService } from '../../../infrastructure/firebase/chatService';
-import { seedDemoSocialData } from '../../../seedData';
-import { COLORS, LAYOUT, SHADOW, SPACING } from '../../theme';
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
+import { Check, MapPin, Plus, UserPlus, Users, X, Zap } from "lucide-react-native";
+import { collection, doc, getDoc, onSnapshot, query, where } from "firebase/firestore";
+import { auth, db } from "../../../infrastructure/firebase/firebase";
+import { friendService } from "../../../infrastructure/firebase/friendService";
+import { chatService } from "../../../infrastructure/firebase/chatService";
+import { seedDemoSocialData } from "../../../seedData";
+import { COLORS, LAYOUT, SHADOW, SPACING } from "../../theme";
 
-function getAvatarUri(name) {
-  return `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'B')}&background=ffffff&color=2563eb&bold=true&size=256`;
+function getAvatarUri(user) {
+  return (
+    user?.avatarUrl ||
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(
+      user?.name || "Friend",
+    )}&background=111827&color=ffffff&bold=true&size=256`
+  );
 }
 
 function StatCard({ value, label, accent = COLORS.accent }) {
@@ -32,36 +37,46 @@ function StatCard({ value, label, accent = COLORS.accent }) {
   );
 }
 
-function FriendRow({ user, rightNode, onPress }) {
+function FriendChip({ user, onPress }) {
   return (
-    <TouchableOpacity style={styles.friendRow} onPress={onPress} activeOpacity={0.7}>
-      <View style={styles.avatarWrap}>
-        <Image source={{ uri: getAvatarUri(user?.name) }} style={styles.avatar} />
-        <View style={[styles.dot, { backgroundColor: user?.isGhostMode ? COLORS.offline : COLORS.online }]} />
+    <TouchableOpacity style={styles.friendChip} onPress={onPress} activeOpacity={0.85}>
+      <View style={styles.friendChipAvatarWrap}>
+        <Image source={{ uri: getAvatarUri(user) }} style={styles.friendChipAvatar} />
+        <View
+          style={[
+            styles.friendChipDot,
+            { backgroundColor: user?.isGhostMode ? COLORS.offline : COLORS.online },
+          ]}
+        />
       </View>
-      <View style={styles.friendInfo}>
-        <Text style={styles.friendName}>{user?.name || 'Friend'}</Text>
-        <Text style={styles.friendSub}>
-          {user?.isGhostMode
-            ? 'Ghost mode enabled'
-            : `@${user?.username || user?.email?.split('@')[0] || 'friend'}`}
-        </Text>
-      </View>
-      {rightNode}
+      <Text style={styles.friendChipName} numberOfLines={1}>
+        {user?.name?.split(" ")[0] || "Friend"}
+      </Text>
     </TouchableOpacity>
   );
 }
 
-function OnlineFriendAvatar({ user, onPress }) {
+function FriendRow({ user, rightNode, onPress }) {
   return (
-    <TouchableOpacity style={styles.onlineFriendItem} onPress={onPress} activeOpacity={0.8}>
-      <View style={styles.onlineAvatarWrap}>
-        <Image source={{ uri: getAvatarUri(user?.name) }} style={styles.onlineAvatar} />
-        <View style={styles.onlineDot} />
+    <TouchableOpacity style={styles.friendRow} onPress={onPress} activeOpacity={0.82}>
+      <Image source={{ uri: getAvatarUri(user) }} style={styles.friendAvatar} />
+      <View style={styles.friendInfo}>
+        <View style={styles.friendNameRow}>
+          <Text style={styles.friendName}>{user?.name || "Friend"}</Text>
+          <View
+            style={[
+              styles.friendStatusDot,
+              { backgroundColor: user?.isGhostMode ? COLORS.offline : COLORS.online },
+            ]}
+          />
+        </View>
+        <Text style={styles.friendSub}>
+          {user?.isGhostMode
+            ? "Ghost mode enabled"
+            : `@${user?.username || user?.email?.split("@")[0] || "friend"}`}
+        </Text>
       </View>
-      <Text style={styles.onlineFriendName} numberOfLines={1}>
-        {user?.name?.split(' ')[0] || 'Friend'}
-      </Text>
+      {rightNode}
     </TouchableOpacity>
   );
 }
@@ -77,21 +92,30 @@ export default function FriendsListScreen({ navigation }) {
     const currentUid = auth.currentUser?.uid;
     if (!currentUid) return undefined;
 
-    const qFriends = query(collection(db, 'friendships'), where('status', '==', 'accepted'));
+    const qFriends = query(collection(db, "friendships"), where("status", "==", "accepted"));
 
     const unsubFriends = onSnapshot(qFriends, async (snapshot) => {
       try {
         const list = [];
         for (const snap of snapshot.docs) {
-          const f = snap.data();
-          const fUid = f.userId1 === currentUid ? f.userId2 : f.userId2 === currentUid ? f.userId1 : null;
-          if (!fUid) continue;
-          const uSnap = await getDoc(doc(db, 'users', fUid));
-          if (uSnap.exists()) list.push({ id: snap.id, uid: fUid, ...uSnap.data() });
+          const friendship = snap.data();
+          const friendUid =
+            friendship.userId1 === currentUid
+              ? friendship.userId2
+              : friendship.userId2 === currentUid
+                ? friendship.userId1
+                : null;
+
+          if (!friendUid) continue;
+
+          const userSnapshot = await getDoc(doc(db, "users", friendUid));
+          if (userSnapshot.exists()) {
+            list.push({ id: snap.id, uid: friendUid, ...userSnapshot.data() });
+          }
         }
         setFriends(list);
-      } catch (e) {
-        console.error(e);
+      } catch (error) {
+        console.error(error);
       } finally {
         setLoading(false);
       }
@@ -107,14 +131,13 @@ export default function FriendsListScreen({ navigation }) {
     };
   }, []);
 
-  const onlineFriendsList = useMemo(() => friends.filter((f) => !f.isGhostMode), [friends]);
-  const onlineCount = onlineFriendsList.length;
+  const visibleFriends = useMemo(() => friends.filter((friend) => !friend.isGhostMode), [friends]);
 
   const handleAccept = async (id) => {
     try {
       await friendService.acceptFriendRequest(id);
     } catch {
-      Alert.alert('Error', 'Could not accept request.');
+      Alert.alert("Error", "Could not accept request.");
     }
   };
 
@@ -122,21 +145,21 @@ export default function FriendsListScreen({ navigation }) {
     try {
       await friendService.declineFriendRequest(id);
     } catch {
-      Alert.alert('Error', 'Could not decline request.');
+      Alert.alert("Error", "Could not decline request.");
     }
   };
 
   const handleLeaveGroup = (groupId) => {
-    Alert.alert('Leave group', 'Are you sure you want to leave this group?', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert("Leave group", "Are you sure you want to leave this group?", [
+      { text: "Cancel", style: "cancel" },
       {
-        text: 'Leave',
-        style: 'destructive',
+        text: "Leave",
+        style: "destructive",
         onPress: async () => {
           try {
             await chatService.leaveGroup(groupId, auth.currentUser.uid);
           } catch {
-            Alert.alert('Error', 'Could not leave this group.');
+            Alert.alert("Error", "Could not leave this group.");
           }
         },
       },
@@ -149,12 +172,12 @@ export default function FriendsListScreen({ navigation }) {
 
     try {
       await chatService.ensureDirectChatExists(myUid, friend.uid, friend);
-      navigation.navigate('DirectChat', {
+      navigation.navigate("DirectChat", {
         otherUid: friend.uid,
-        otherName: friend.name || friend.email?.split('@')[0] || 'Friend',
+        otherName: friend.name || friend.email?.split("@")[0] || "Friend",
       });
-    } catch (e) {
-      Alert.alert('Error', 'Could not open chat.');
+    } catch {
+      Alert.alert("Error", "Could not open chat.");
     }
   };
 
@@ -163,66 +186,78 @@ export default function FriendsListScreen({ navigation }) {
     try {
       const result = await seedDemoSocialData();
       Alert.alert(
-        'Demo ready',
-        `Created ${result.createdUsers.length} demo friends and ${result.createdGroups.length} groups.`
+        "Demo ready",
+        `Created ${result.createdUsers.length} demo friends and ${result.createdGroups.length} groups.`,
       );
-    } catch (e) {
-      Alert.alert('Error', e.message || 'Could not seed demo data.');
+    } catch (error) {
+      Alert.alert("Error", error.message || "Could not seed demo data.");
     } finally {
       setSeeding(false);
     }
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <LinearGradient colors={['#FFFFFF', '#F4F7FF']} style={StyleSheet.absoluteFill} />
+    <SafeAreaView style={styles.container} edges={["top"]}>
+      <LinearGradient colors={["#FFFDF8", "#F7F3FF", "#EFF6FF"]} style={StyleSheet.absoluteFill} />
 
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.headerKicker}>social layer</Text>
-          <Text style={styles.headerTitle}>Friends</Text>
-          <Text style={styles.headerSubtitle}>Build the circles that appear on your map.</Text>
-        </View>
-        <TouchableOpacity style={styles.addBtn} onPress={() => navigation.navigate('AddFriend')}>
-          <UserPlus color={COLORS.white} size={22} />
-        </TouchableOpacity>
-      </View>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scroll}
+      >
+        <View style={styles.heroCard}>
+          <View style={styles.heroTopRow}>
+            <View>
+              <Text style={styles.headerKicker}>social layer</Text>
+              <Text style={styles.headerTitle}>Friends</Text>
+              <Text style={styles.headerSubtitle}>
+                Manage who appears on your map and who gets your moments.
+              </Text>
+            </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
-        {/* New Online Friends Horizontal Section */}
-        {onlineCount > 0 && (
-          <View style={styles.onlineSection}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.onlineScroll}>
-              {onlineFriendsList.map((friend) => (
-                <OnlineFriendAvatar
+            <TouchableOpacity
+              style={styles.addBtn}
+              onPress={() => navigation.navigate("AddFriend")}
+            >
+              <UserPlus color={COLORS.white} size={22} />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.statsRow}>
+            <StatCard value={friends.length} label="friends" />
+            <StatCard value={visibleFriends.length} label="visible now" accent={COLORS.green} />
+            <StatCard value={groups.length} label="groups" accent={COLORS.purple} />
+          </View>
+
+          {visibleFriends.length ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.friendChipRow}
+            >
+              {visibleFriends.map((friend) => (
+                <FriendChip
                   key={friend.uid}
                   user={friend}
-                  onPress={() => handleOpenChat(friend)}
+                  onPress={() => navigation.navigate("Map", { focusUid: friend.uid })}
                 />
               ))}
             </ScrollView>
-          </View>
-        )}
-
-        <View style={styles.statsRow}>
-          <StatCard value={friends.length} label="friends" />
-          <StatCard value={onlineCount} label="visible now" accent={COLORS.green} />
-          <StatCard value={groups.length} label="groups" accent={COLORS.purple} />
+          ) : null}
         </View>
 
         <View style={styles.actionRow}>
-          <TouchableOpacity style={styles.actionCard} onPress={() => navigation.navigate('CreateGroup')}>
-            <View style={[styles.actionIcon, { backgroundColor: COLORS.accentDim }]}>
+          <TouchableOpacity style={styles.actionCard} onPress={() => navigation.navigate("CreateGroup")}>
+            <View style={[styles.actionIcon, { backgroundColor: "rgba(124,58,237,0.18)" }]}>
               <Plus color={COLORS.accent} size={20} />
             </View>
             <View style={styles.actionBody}>
               <Text style={styles.actionLabel}>Create group</Text>
-              <Text style={styles.actionHint}>Start a location room for friends.</Text>
+              <Text style={styles.actionHint}>Spin up a shared room for trips, classes or your project team.</Text>
             </View>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.actionCard} onPress={handleSeedDemo} disabled={seeding}>
-            <View style={[styles.actionIcon, { backgroundColor: 'rgba(245,183,0,0.14)' }]}>
+            <View style={[styles.actionIcon, { backgroundColor: "rgba(245,158,11,0.18)" }]}>
               {seeding ? (
                 <ActivityIndicator size="small" color={COLORS.yellow} />
               ) : (
@@ -231,7 +266,7 @@ export default function FriendsListScreen({ navigation }) {
             </View>
             <View style={styles.actionBody}>
               <Text style={styles.actionLabel}>Seed demo</Text>
-              <Text style={styles.actionHint}>Fill the app with sample users.</Text>
+              <Text style={styles.actionHint}>Generate a quick social graph so the app looks alive for review.</Text>
             </View>
           </TouchableOpacity>
         </View>
@@ -239,18 +274,24 @@ export default function FriendsListScreen({ navigation }) {
         {pendingRequests.length > 0 ? (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Friend requests</Text>
-            <View style={styles.card}>
+            <View style={styles.sectionCard}>
               {pendingRequests.map((req) => (
                 <FriendRow
                   key={req.friendshipId}
                   user={req.sender}
                   rightNode={
                     <View style={styles.btnGroup}>
-                      <TouchableOpacity style={styles.btnAccept} onPress={() => handleAccept(req.friendshipId)}>
+                      <TouchableOpacity
+                        style={styles.btnAccept}
+                        onPress={() => handleAccept(req.friendshipId)}
+                      >
                         <Check color={COLORS.white} size={16} />
                       </TouchableOpacity>
-                      <TouchableOpacity style={styles.btnDecline} onPress={() => handleDecline(req.friendshipId)}>
-                        <X color={COLORS.textPrimary} size={16} />
+                      <TouchableOpacity
+                        style={styles.btnDecline}
+                        onPress={() => handleDecline(req.friendshipId)}
+                      >
+                        <X color={COLORS.danger} size={16} />
                       </TouchableOpacity>
                     </View>
                   }
@@ -265,7 +306,7 @@ export default function FriendsListScreen({ navigation }) {
             <Text style={styles.sectionTitle}>Groups</Text>
             <Text style={styles.sectionCount}>{groups.length}</Text>
           </View>
-          <View style={styles.card}>
+          <View style={styles.sectionCard}>
             {groups.length ? (
               groups.map((group) => (
                 <View key={group.id} style={styles.groupRow}>
@@ -277,18 +318,23 @@ export default function FriendsListScreen({ navigation }) {
                     <Text style={styles.friendSub}>{group.members.length} members</Text>
                   </View>
                   <TouchableOpacity
-                    style={styles.groupChatBtn}
-                    onPress={() => navigation.navigate('GroupChat', { groupId: group.id, groupName: group.name })}
+                    style={styles.groupOpenBtn}
+                    onPress={() =>
+                      navigation.navigate("GroupChat", {
+                        groupId: group.id,
+                        groupName: group.name,
+                      })
+                    }
                   >
-                    <Text style={styles.groupChatBtnText}>Open</Text>
+                    <Text style={styles.groupOpenText}>Open</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.leaveBtn} onPress={() => handleLeaveGroup(group.id)}>
-                    <Text style={styles.leaveText}>X</Text>
+                  <TouchableOpacity style={styles.groupLeaveBtn} onPress={() => handleLeaveGroup(group.id)}>
+                    <X color={COLORS.danger} size={14} />
                   </TouchableOpacity>
                 </View>
               ))
             ) : (
-              <Text style={styles.emptyText}>No groups yet. Tap "Create group" to get started.</Text>
+              <Text style={styles.emptyText}>No groups yet. Create one for your classmates or your travel crew.</Text>
             )}
           </View>
         </View>
@@ -298,7 +344,7 @@ export default function FriendsListScreen({ navigation }) {
             <Text style={styles.sectionTitle}>All friends</Text>
             <Text style={styles.sectionCount}>{friends.length}</Text>
           </View>
-          <View style={styles.card}>
+          <View style={styles.sectionCard}>
             {loading ? (
               <ActivityIndicator color={COLORS.accent} style={{ marginVertical: 24 }} />
             ) : friends.length ? (
@@ -310,15 +356,23 @@ export default function FriendsListScreen({ navigation }) {
                   rightNode={
                     <View style={styles.friendActions}>
                       <TouchableOpacity
-                        style={[styles.pill, friend.isGhostMode && styles.pillGhost]}
-                        onPress={(e) => {
-                          e.stopPropagation();
-                          navigation.navigate('Map', { focusUid: friend.uid });
+                        style={[styles.friendPill, friend.isGhostMode && styles.friendPillGhost]}
+                        onPress={(event) => {
+                          event.stopPropagation();
+                          navigation.navigate("Map", { focusUid: friend.uid });
                         }}
                       >
-                        <MapPin size={13} color={friend.isGhostMode ? COLORS.textMuted : COLORS.accent} />
-                        <Text style={[styles.pillText, friend.isGhostMode && styles.pillTextGhost, { marginLeft: 4 }]}>
-                          {friend.isGhostMode ? 'Hidden' : 'Live'}
+                        <MapPin
+                          size={13}
+                          color={friend.isGhostMode ? COLORS.textMuted : COLORS.accent}
+                        />
+                        <Text
+                          style={[
+                            styles.friendPillText,
+                            friend.isGhostMode && styles.friendPillTextGhost,
+                          ]}
+                        >
+                          {friend.isGhostMode ? "Hidden" : "Live"}
                         </Text>
                       </TouchableOpacity>
                     </View>
@@ -326,41 +380,49 @@ export default function FriendsListScreen({ navigation }) {
                 />
               ))
             ) : (
-              <Text style={styles.emptyText}>No friends yet. Tap the plus button to add someone.</Text>
+              <Text style={styles.emptyText}>No friends yet. Tap the add button and build your circle.</Text>
             )}
           </View>
         </View>
-
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.bg },
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.bg,
+  },
   scroll: {
     paddingHorizontal: SPACING.lg,
     paddingBottom: LAYOUT.tabBarBottom + LAYOUT.tabBarHeight + SPACING.xxl,
   },
-  header: {
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 24,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+  heroCard: {
+    padding: 18,
+    borderRadius: 28,
+    backgroundColor: "rgba(255,255,255,0.9)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.7)",
+    marginBottom: 18,
+    ...SHADOW.card,
+  },
+  heroTopRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 16,
   },
   headerKicker: {
     color: COLORS.accent,
     fontSize: 12,
-    fontWeight: '900',
+    fontWeight: "900",
     letterSpacing: 1.8,
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
   },
   headerTitle: {
     color: COLORS.textPrimary,
     fontSize: 34,
-    fontWeight: '900',
+    fontWeight: "900",
     letterSpacing: -1.2,
     marginTop: 4,
   },
@@ -368,230 +430,275 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     fontSize: 13,
     marginTop: 6,
+    maxWidth: 260,
+    lineHeight: 20,
   },
   addBtn: {
-    width: 52,
-    height: 52,
-    borderRadius: 22,
+    width: 54,
+    height: 54,
+    borderRadius: 18,
     backgroundColor: COLORS.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     ...SHADOW.accent,
   },
-  onlineSection: {
-    marginBottom: 24,
-    marginHorizontal: -16,
+  statsRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 18,
   },
-  onlineScroll: {
-    paddingHorizontal: 20,
-    gap: 18,
+  statCard: {
+    flex: 1,
+    backgroundColor: "rgba(247,243,255,0.95)",
+    borderRadius: 22,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: "rgba(124,58,237,0.08)",
+    alignItems: "center",
   },
-  onlineFriendItem: {
-    alignItems: 'center',
+  statValue: {
+    fontSize: 28,
+    fontWeight: "900",
+    letterSpacing: -1,
+  },
+  statLabel: {
+    color: COLORS.textMuted,
+    fontSize: 10,
+    fontWeight: "800",
+    marginTop: 6,
+    textTransform: "uppercase",
+    letterSpacing: 0.7,
+  },
+  friendChipRow: {
+    gap: 14,
+    paddingTop: 18,
+  },
+  friendChip: {
+    width: 72,
+    alignItems: "center",
+  },
+  friendChipAvatarWrap: {
     width: 64,
+    height: 64,
+    borderRadius: 24,
+    padding: 3,
+    backgroundColor: "rgba(255,255,255,0.96)",
+    borderWidth: 1,
+    borderColor: "rgba(124,58,237,0.08)",
   },
-  onlineAvatarWrap: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    borderWidth: 2,
-    borderColor: COLORS.white,
-    backgroundColor: '#F3F4F6',
-    padding: 2,
-    ...SHADOW.card,
+  friendChipAvatar: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 21,
+    backgroundColor: "#111827",
   },
-  onlineAvatar: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 28,
-  },
-  onlineDot: {
-    position: 'absolute',
-    right: 0,
-    bottom: 0,
+  friendChipDot: {
+    position: "absolute",
+    right: -1,
+    bottom: -1,
     width: 16,
     height: 16,
     borderRadius: 8,
-    backgroundColor: COLORS.online,
     borderWidth: 3,
-    borderColor: COLORS.white,
+    borderColor: "#0B1220",
   },
-  onlineFriendName: {
+  friendChipName: {
     marginTop: 8,
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: "700",
     color: COLORS.textPrimary,
-    textAlign: 'center',
+    textAlign: "center",
   },
-  statsRow: { flexDirection: 'row', gap: 12, marginBottom: 20 },
-  statCard: {
-    flex: 1,
-    backgroundColor: COLORS.glass,
-    borderRadius: 24,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: COLORS.glassBorder,
-    alignItems: 'center',
-    ...SHADOW.card,
+  actionRow: {
+    gap: 12,
+    marginBottom: 24,
   },
-  statValue: { fontSize: 28, fontWeight: '900', letterSpacing: -1 },
-  statLabel: {
-    color: COLORS.textMuted,
-    fontSize: 11,
-    fontWeight: '800',
-    marginTop: 6,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  actionRow: { gap: 12, marginBottom: 28 },
   actionCard: {
-    backgroundColor: COLORS.bgElevated,
-    borderRadius: 26,
-    minHeight: 80,
-    flexDirection: 'row',
-    alignItems: 'center',
+    backgroundColor: "rgba(255,255,255,0.94)",
+    borderRadius: 24,
+    minHeight: 84,
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 16,
     gap: 14,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: "rgba(124,58,237,0.08)",
     ...SHADOW.card,
   },
   actionIcon: {
-    width: 48,
-    height: 48,
+    width: 50,
+    height: 50,
     borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
-  actionBody: { flex: 1 },
-  actionLabel: { color: COLORS.textPrimary, fontSize: 15, fontWeight: '800' },
-  actionHint: { color: COLORS.textMuted, fontSize: 12, marginTop: 2 },
-  section: { marginBottom: 24 },
+  actionBody: {
+    flex: 1,
+  },
+  actionLabel: {
+    color: COLORS.textPrimary,
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  actionHint: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    marginTop: 3,
+    lineHeight: 18,
+  },
+  section: {
+    marginBottom: 24,
+  },
   sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 14,
     paddingHorizontal: 4,
   },
   sectionTitle: {
     color: COLORS.textMuted,
     fontSize: 13,
-    fontWeight: '900',
-    textTransform: 'uppercase',
+    fontWeight: "900",
+    textTransform: "uppercase",
     letterSpacing: 1.3,
   },
-  sectionCount: { color: COLORS.accent, fontSize: 14, fontWeight: '900' },
-  card: {
-    backgroundColor: COLORS.bgElevated,
-    borderRadius: 30,
+  sectionCount: {
+    color: COLORS.accent,
+    fontSize: 14,
+    fontWeight: "900",
+  },
+  sectionCard: {
+    backgroundColor: "rgba(255,255,255,0.94)",
+    borderRadius: 28,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    overflow: 'hidden',
-    padding: 6,
+    borderColor: "rgba(124,58,237,0.08)",
+    overflow: "hidden",
+    padding: 8,
     ...SHADOW.card,
   },
   friendRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingVertical: 12,
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     gap: 14,
   },
-  avatarWrap: {
+  friendAvatar: {
     width: 56,
     height: 56,
-    borderRadius: 24,
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.9)',
-    padding: 2,
-    backgroundColor: '#F3F4F6',
+    borderRadius: 22,
+    backgroundColor: "#111827",
   },
-  avatar: { width: '100%', height: '100%', borderRadius: 20, backgroundColor: COLORS.bgSoft },
-  dot: {
-    position: 'absolute',
-    right: -2,
-    bottom: -2,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    borderWidth: 3,
-    borderColor: COLORS.white,
+  friendInfo: {
+    flex: 1,
   },
-  friendInfo: { flex: 1 },
-  friendName: { color: COLORS.textPrimary, fontSize: 16, fontWeight: '800' },
-  friendSub: { color: COLORS.textSecondary, fontSize: 13, marginTop: 2 },
+  friendNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  friendName: {
+    color: COLORS.textPrimary,
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  friendStatusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  friendSub: {
+    color: COLORS.textSecondary,
+    fontSize: 13,
+    marginTop: 3,
+  },
+  btnGroup: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  btnAccept: {
+    width: 42,
+    height: 42,
+    borderRadius: 16,
+    backgroundColor: COLORS.green,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  btnDecline: {
+    width: 42,
+    height: 42,
+    borderRadius: 16,
+    backgroundColor: "#FEE2E2",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   groupRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     padding: 12,
     gap: 14,
   },
   groupIcon: {
     width: 52,
     height: 52,
-    borderRadius: 22,
-    backgroundColor: COLORS.accentDim,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderRadius: 20,
+    backgroundColor: "rgba(124,58,237,0.16)",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  groupChatBtn: {
-    backgroundColor: COLORS.ink,
+  groupOpenBtn: {
+    backgroundColor: COLORS.accent,
     paddingHorizontal: 16,
-    paddingVertical: 9,
+    paddingVertical: 10,
     borderRadius: 14,
   },
-  groupChatBtnText: { color: COLORS.white, fontSize: 13, fontWeight: '900' },
-  leaveBtn: {
+  groupOpenText: {
+    color: COLORS.white,
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  groupLeaveBtn: {
     width: 38,
     height: 38,
     borderRadius: 14,
-    backgroundColor: '#FEF2F2',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  leaveText: { color: COLORS.danger, fontWeight: '900' },
-  btnGroup: { flexDirection: 'row', gap: 10 },
-  btnAccept: {
-    width: 42,
-    height: 42,
-    borderRadius: 16,
-    backgroundColor: COLORS.green,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  btnDecline: {
-    width: 42,
-    height: 42,
-    borderRadius: 16,
-    backgroundColor: COLORS.bgInput,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  pill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 14,
-    backgroundColor: 'rgba(34,197,94,0.12)',
+    backgroundColor: "#FEE2E2",
+    alignItems: "center",
+    justifyContent: "center",
   },
   friendActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
   },
-  pillGhost: { backgroundColor: COLORS.bgInput },
-  pillText: { color: COLORS.green, fontSize: 11, fontWeight: '900', textTransform: 'uppercase' },
-  pillTextGhost: { color: COLORS.textMuted },
-  emptyText: {
+  friendPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 14,
+    backgroundColor: "rgba(34,197,94,0.14)",
+  },
+  friendPillGhost: {
+    backgroundColor: "rgba(148,163,184,0.16)",
+  },
+  friendPillText: {
+    color: COLORS.green,
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "uppercase",
+  },
+  friendPillTextGhost: {
     color: COLORS.textMuted,
+  },
+  emptyText: {
+    color: COLORS.textSecondary,
     fontSize: 14,
-    padding: 32,
-    textAlign: 'center',
+    padding: 28,
+    textAlign: "center",
     lineHeight: 22,
-    fontWeight: '500',
+    fontWeight: "500",
   },
 });

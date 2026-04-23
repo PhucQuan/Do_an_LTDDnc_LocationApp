@@ -1,4 +1,4 @@
-import React, { memo, useEffect, useRef } from "react";
+import React, { memo, useEffect, useRef, useState } from "react";
 import { Animated, Image, StyleSheet, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { COLORS, SHADOW } from "../../theme";
@@ -12,13 +12,10 @@ const FALLBACK_COLORS = [
   ["#FB7185", "#F43F5E"], // red
 ];
 
-function getInitials(name) {
-  if (!name) return "?";
-  const parts = name.trim().split(/\s+/);
-  if (parts.length >= 2) {
-    return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
-  }
-  return name.slice(0, 2).toUpperCase();
+function getFallbackAvatarUrl(name) {
+  return `https://ui-avatars.com/api/?name=${encodeURIComponent(
+    name || "Friend",
+  )}`;
 }
 
 function getFallbackGradient(name) {
@@ -62,7 +59,9 @@ function SocialMapMarkerComponent({
   isSelected = false,
   note = null,
   noteAt = null,
+  onLoad,
 }) {
+  const [imageFailed, setImageFailed] = useState(false);
   const live = isLive(lastUpdatedAt) && !isGhostMode;
   const activeNote = getActiveNote(note, noteAt);
   const gradientColors = getFallbackGradient(name);
@@ -114,8 +113,14 @@ function SocialMapMarkerComponent({
     outputRange: [0.3, 0.8],
   });
 
+  useEffect(() => {
+    setImageFailed(false);
+  }, [avatarUrl]);
+
+  const shouldShowImage = Boolean(avatarUrl) && !imageFailed;
+
   return (
-    <View style={styles.wrap}>
+    <View style={styles.wrap} collapsable={false} renderToHardwareTextureAndroid={false}>
       {/* Note bubble */}
       {activeNote ? (
         <View style={styles.noteBubble}>
@@ -136,8 +141,8 @@ function SocialMapMarkerComponent({
         </View>
       ) : null}
 
-      {/* Glow effect for live users */}
-      {live && !isGhostMode ? (
+      {/* Glow effect disabled for stability */}
+      {/* {live && !isGhostMode ? (
         <Animated.View
           style={[
             styles.glowRing,
@@ -147,67 +152,43 @@ function SocialMapMarkerComponent({
             },
           ]}
         >
-          <LinearGradient
-            colors={[
-              gradientColors[0] + "80",
-              gradientColors[1] + "40",
-              "transparent",
-            ]}
-            style={styles.glowGradient}
+          <View
+            style={[styles.glowGradient, { backgroundColor: gradientColors[0] + "40" }]}
           />
         </Animated.View>
-      ) : null}
+      ) : null} */}
 
-      {/* Avatar container with gradient border */}
+      {/* Avatar container with solid border */}
       <View
         style={[
           styles.avatarContainer,
           isSelected && styles.avatarContainerSelected,
         ]}
       >
-        {live && !isGhostMode ? (
-          <LinearGradient
-            colors={gradientColors}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.gradientBorder}
-          >
-            <View style={styles.avatarInner}>
-              {avatarUrl ? (
-                <Image source={{ uri: avatarUrl }} style={styles.avatar} />
-              ) : (
-                <LinearGradient
-                  colors={gradientColors}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.fallbackAvatar}
-                >
-                  <Text style={styles.initials}>{getInitials(name)}</Text>
-                </LinearGradient>
-              )}
-            </View>
-          </LinearGradient>
-        ) : (
-          <View style={[styles.gradientBorder, styles.offlineBorder]}>
-            <View style={styles.avatarInner}>
-              {avatarUrl ? (
-                <Image
-                  source={{ uri: avatarUrl }}
-                  style={[styles.avatar, styles.avatarGhost]}
-                />
-              ) : (
-                <View
-                  style={[
-                    styles.fallbackAvatar,
-                    { backgroundColor: COLORS.textMuted },
-                  ]}
-                >
-                  <Text style={styles.initials}>{getInitials(name)}</Text>
-                </View>
-              )}
-            </View>
+        <View
+          style={[
+            styles.gradientBorder,
+            { backgroundColor: live ? gradientColors[0] : COLORS.offline },
+          ]}
+        >
+          <View style={styles.avatarInner}>
+            {shouldShowImage ? (
+              <Image
+                source={{ uri: avatarUrl }}
+                style={[styles.avatar, !live && styles.avatarGhost]}
+                onLoadEnd={onLoad}
+                onError={() => setImageFailed(true)}
+              />
+            ) : (
+              <View style={styles.fallbackAvatar}>
+                <Text style={styles.initials}>
+                  {name ? name.slice(0, 1).toUpperCase() : "?"}
+                </Text>
+              </View>
+            )}
           </View>
-        )}
+        </View>
+      </View>
 
         {/* Battery indicator */}
         {batteryLevel < 20 && live ? (
@@ -215,7 +196,6 @@ function SocialMapMarkerComponent({
             <Text style={styles.batteryText}>{Math.round(batteryLevel)}%</Text>
           </View>
         ) : null}
-      </View>
 
       {/* Name label */}
       <Text style={styles.nameLabel} numberOfLines={1}>
@@ -291,7 +271,6 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.bg,
     borderWidth: 2,
     zIndex: 9,
-    ...SHADOW.card,
   },
   speedText: {
     fontSize: 13,
@@ -313,8 +292,8 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   glowGradient: {
-    width: "100%",
-    height: "100%",
+    width: 70,
+    height: 70,
     borderRadius: 35,
   },
   // Avatar container
@@ -328,11 +307,10 @@ const styles = StyleSheet.create({
     transform: [{ scale: 1.15 }],
   },
   gradientBorder: {
-    width: "100%",
-    height: "100%",
+    width: 56,
+    height: 56,
     borderRadius: 28,
     padding: 3,
-    ...SHADOW.card,
   },
   offlineBorder: {
     backgroundColor: COLORS.bgSoft,
@@ -341,14 +319,15 @@ const styles = StyleSheet.create({
     padding: 2,
   },
   avatarInner: {
-    flex: 1,
+    width: 50,
+    height: 50,
     borderRadius: 25,
     overflow: "hidden",
     backgroundColor: COLORS.bg,
   },
   avatar: {
-    width: "100%",
-    height: "100%",
+    width: 50,
+    height: 50,
   },
   avatarGhost: {
     opacity: 0.5,
@@ -396,11 +375,6 @@ const styles = StyleSheet.create({
   },
   statusLive: {
     backgroundColor: COLORS.neonGreen,
-    shadowColor: COLORS.neonGreen,
-    shadowOpacity: 0.8,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 8,
   },
   statusOffline: {
     backgroundColor: COLORS.offline,

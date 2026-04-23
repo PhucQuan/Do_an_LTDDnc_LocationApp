@@ -41,6 +41,7 @@ import {
   UserPlus,
 } from "lucide-react-native";
 import { auth, db } from "../../../infrastructure/firebase/firebase";
+import { avatarMigrationService } from "../../../infrastructure/firebase/avatarMigrationService";
 import { useLocation } from "../../../core/hooks/useLocation";
 import { useVisibilityScope } from "../../../core/hooks/useVisibilityScope";
 import { locationService } from "../../../infrastructure/firebase/locationService";
@@ -118,6 +119,7 @@ export default function MapScreen({ navigation }) {
   const insets = useSafeAreaInsets();
 
   const [otherUsers, setOtherUsers] = useState({});
+  const [friendProfiles, setFriendProfiles] = useState({});
   const [currentProfile, setCurrentProfile] = useState(null);
   const [cityName, setCityName] = useState("Your city");
   const [selectedUser, setSelectedUser] = useState(null);
@@ -138,6 +140,7 @@ export default function MapScreen({ navigation }) {
   const [localTrail, setLocalTrail] = useState([]);
   const [friendTrails, setFriendTrails] = useState({});
   const [showStickerPicker, setShowStickerPicker] = useState(false);
+  const [markerLoaded, setMarkerLoaded] = useState({});
   const [stickerTarget, setStickerTarget] = useState(null);
   const [activeReaction, setActiveReaction] = useState(null);
   const [showGlobe, setShowGlobe] = useState(false);
@@ -185,7 +188,18 @@ export default function MapScreen({ navigation }) {
 
         const userSnapshot = await getDoc(doc(db, "users", uid));
         if (userSnapshot.exists()) {
-          setCurrentProfile(userSnapshot.data());
+          const nextProfile = userSnapshot.data();
+          setCurrentProfile(nextProfile);
+
+          const migratedAvatarUrl =
+            await avatarMigrationService.migrateCurrentUserAvatarIfNeeded(nextProfile).catch(() => null);
+
+          if (migratedAvatarUrl && migratedAvatarUrl !== nextProfile?.avatarUrl) {
+            setCurrentProfile((prev) => ({
+              ...(prev || nextProfile),
+              avatarUrl: migratedAvatarUrl,
+            }));
+          }
         }
 
         const realtimeState = await locationService.getMyRealtimeState();
@@ -314,6 +328,49 @@ export default function MapScreen({ navigation }) {
   }, [visibleUserIds]);
 
   useEffect(() => {
+    const loadFriendProfiles = async () => {
+      const myUid = auth.currentUser?.uid;
+      const ids = [...visibleUserIds].filter((uid) => uid && uid !== myUid);
+
+      if (!ids.length) {
+        setFriendProfiles({});
+        return;
+      }
+
+      try {
+        const snapshots = await Promise.all(
+          ids.map(async (uid) => {
+            const snapshot = await getDoc(doc(db, "users", uid));
+            return [uid, snapshot.exists() ? snapshot.data() : null];
+          }),
+        );
+
+        setFriendProfiles(
+          snapshots.reduce((accumulator, [uid, profile]) => {
+            if (!profile) {
+              return accumulator;
+            }
+
+            accumulator[uid] = {
+              displayName: profile.name || profile.displayName || null,
+              avatarUrl:
+                profile.avatarUrl ||
+                profile.photoURL ||
+                profile.photoUrl ||
+                null,
+            };
+            return accumulator;
+          }, {}),
+        );
+      } catch (error) {
+        console.warn("[MapScreen] Could not hydrate friend profiles:", error.message);
+      }
+    };
+
+    loadFriendProfiles();
+  }, [visibleUserIds]);
+
+  useEffect(() => {
     const unsubscribe = locationService.subscribeToHistory(
       historyFilter,
       (paths) => {
@@ -378,8 +435,26 @@ export default function MapScreen({ navigation }) {
   }, []);
 
   const onlineUsers = useMemo(
-    () => Object.entries(otherUsers),
-    [otherUsers],
+    () =>
+      Object.entries(otherUsers).map(([uid, user]) => {
+        const profile = friendProfiles[uid];
+        const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(
+          profile?.displayName || user.displayName || "Friend",
+        )}&background=0f172a&color=ffffff&bold=true&size=256`;
+
+        return [
+          uid,
+          {
+            ...user,
+            displayName: profile?.displayName || user.displayName || "Friend",
+            avatarUrl:
+              profile?.avatarUrl ||
+              user.avatarUrl ||
+              fallbackAvatar,
+          },
+        ];
+      }),
+    [friendProfiles, otherUsers],
   );
 
   const visibleMoments = useMemo(
@@ -653,14 +728,15 @@ export default function MapScreen({ navigation }) {
             <Marker.Animated
               key={uid}
               coordinate={animatedCoordinate}
-              anchor={{ x: 0.5, y: 0.5 }}
-              tracksViewChanges
+              anchor={{ x: 0.5, y: 0.72 }}
+              tracksViewChanges={Platform.OS === "android" ? true : Boolean(user.avatarUrl) && !markerLoaded[uid]}
+              style={styles.markerContainer}
               zIndex={900}
               onPress={() => focusFriend(uid, user)}
             >
               <SocialMapMarker
                 name={user.displayName || "Friend"}
-                avatarUrl={user.avatarUrl}
+                avatarUrl={user.avatarUrl || null}
                 speedKmh={user.speedKmh}
                 batteryLevel={user.batteryLevel}
                 stationarySince={user.stationarySince}
@@ -670,6 +746,12 @@ export default function MapScreen({ navigation }) {
                 isSelected={selectedFriendUid === uid}
                 note={user.note}
                 noteAt={user.noteAt}
+                onLoad={() =>
+                  setMarkerLoaded((prev) => ({
+                    ...prev,
+                    [uid]: true,
+                  }))
+                }
               />
             </Marker.Animated>
           );
@@ -716,12 +798,6 @@ export default function MapScreen({ navigation }) {
                 {visibleMoments.length}
               </Text>
               <Text style={styles.statText}>MOMENTS</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.cameraButton}
-              onPress={() => handleShareMoment("camera")}
-            >
-              <Text style={styles.cameraText}>CAMERA{"\n"}LIVE</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -770,6 +846,15 @@ export default function MapScreen({ navigation }) {
             >
               Trail {showFootprints ? "on" : "off"}
             </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.bottomCameraButton}
+            onPress={() => handleShareMoment("camera")}
+          >
+            <View style={styles.bottomCameraCircle}>
+              <Camera color={COLORS.white} size={22} />
+            </View>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -1098,11 +1183,12 @@ const styles = StyleSheet.create({
     zIndex: 40,
   },
   headerCard: {
-    backgroundColor: "rgba(20, 20, 22, 0.85)",
-    borderRadius: 20,
-    padding: 16,
+    backgroundColor: "rgba(12, 16, 26, 0.9)",
+    borderRadius: 24,
+    padding: 18,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.05)",
+    borderColor: "rgba(255,255,255,0.08)",
+    ...SHADOW.card,
   },
   headerLabel: {
     color: COLORS.accent,
@@ -1124,7 +1210,7 @@ const styles = StyleSheet.create({
   },
   statBadge: {
     flex: 1,
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    backgroundColor: "rgba(255, 255, 255, 0.06)",
     borderRadius: 14,
     paddingVertical: 10,
     paddingHorizontal: 8,
@@ -1178,11 +1264,12 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: "rgba(30, 30, 32, 0.9)",
+    backgroundColor: "rgba(12,16,26,0.92)",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.05)",
+    borderColor: "rgba(255,255,255,0.08)",
+    ...SHADOW.card,
   },
 
   // Bottom controls
@@ -1198,11 +1285,11 @@ const styles = StyleSheet.create({
     height: 44,
     paddingHorizontal: 16,
     borderRadius: 22,
-    backgroundColor: "rgba(30,30,32,0.9)",
+    backgroundColor: "rgba(12,16,26,0.92)",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.05)",
+    borderColor: "rgba(255,255,255,0.08)",
   },
   controlButtonActive: {
     backgroundColor: COLORS.accent,
@@ -1234,13 +1321,13 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 44,
     borderRadius: 22,
-    backgroundColor: "rgba(30,30,32,0.9)",
+    backgroundColor: "rgba(12,16,26,0.92)",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.05)",
+    borderColor: "rgba(255,255,255,0.08)",
   },
   followButtonActive: {
     backgroundColor: COLORS.accent,
@@ -1382,6 +1469,30 @@ const styles = StyleSheet.create({
   momentsBackdrop: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(0,0,0,0.45)",
+  },
+  markerContainer: {
+    width: 100,
+    height: 145,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  bottomCameraButton: {
+    width: 64,
+    height: 64,
+    alignItems: "center",
+    justifyContent: "center",
+    marginHorizontal: 8,
+  },
+  bottomCameraCircle: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: COLORS.ink,
+    alignItems: "center",
+    justifyContent: "center",
+    ...SHADOW.card,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
   },
   momentsSheet: {
     backgroundColor: COLORS.white,

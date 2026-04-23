@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   ActivityIndicator,
   Alert,
@@ -11,13 +12,14 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system/legacy';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Camera, Gift, LogOut, MapPin, MessageCircle, Shield, Users } from 'lucide-react-native';
-import { collection, doc, getDoc, getDocs, query, updateDoc, where } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, onSnapshot, query, updateDoc, where } from 'firebase/firestore';
 import { auth, db } from '../../../infrastructure/firebase/firebase';
 import { authService } from '../../../infrastructure/firebase/authService';
+import { avatarMigrationService } from '../../../infrastructure/firebase/avatarMigrationService';
 import { locationService } from '../../../infrastructure/firebase/locationService';
+import { imageUploadService } from '../../../infrastructure/supabase/imageUploadService';
 import { COLORS, LAYOUT, SHADOW, SPACING } from '../../theme';
 
 function getAvatarUri(profile, currentName) {
@@ -49,7 +51,15 @@ export default function ProfileScreen({ navigation }) {
 
     const userDoc = await getDoc(doc(db, 'users', uid));
     if (userDoc.exists()) {
-      setProfile(userDoc.data());
+      const nextProfile = userDoc.data();
+      setProfile(nextProfile);
+
+      const migratedAvatarUrl =
+        await avatarMigrationService.migrateCurrentUserAvatarIfNeeded(nextProfile).catch(() => null);
+
+      if (migratedAvatarUrl && migratedAvatarUrl !== nextProfile?.avatarUrl) {
+        setProfile((prev) => ({ ...(prev || nextProfile), avatarUrl: migratedAvatarUrl }));
+      }
     }
 
     const groupsSnapshot = await getDocs(query(collection(db, 'groups'), where('members', 'array-contains', uid)));
@@ -68,8 +78,23 @@ export default function ProfileScreen({ navigation }) {
     });
   };
 
+  useFocusEffect(
+    useCallback(() => {
+      loadProfile();
+    }, [])
+  );
+
   useEffect(() => {
-    loadProfile();
+    const uid = auth.currentUser?.uid;
+    if (!uid) return undefined;
+
+    const unsubscribe = onSnapshot(doc(db, 'users', uid), (snapshot) => {
+      if (snapshot.exists()) {
+        setProfile(snapshot.data());
+      }
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const currentName = useMemo(
@@ -121,25 +146,25 @@ export default function ProfileScreen({ navigation }) {
 
       setUpdatingAvatar(true);
 
-      // Convert image to base64 (quality 0.3 from ImagePicker keeps base64 small)
-      const base64 = await FileSystem.readAsStringAsync(result.assets[0].uri, {
-        encoding: 'base64',
-      });
-
       const uid = auth.currentUser?.uid;
       if (!uid) {
         setUpdatingAvatar(false);
         return;
       }
 
-      // Save base64 as avatarUrl in Firestore user document
-      const avatarUrl = `data:image/jpeg;base64,${base64}`;
+      const publicUrl = await imageUploadService.uploadAvatarImage(result.assets[0].uri, uid);
+
+      if (!publicUrl) {
+        throw new Error('Failed to upload image to Supabase');
+      }
+
+      const avatarUrl = publicUrl;
       await updateDoc(doc(db, 'users', uid), { avatarUrl });
 
       // Update local state so profile screen shows new avatar immediately
       setProfile((prev) => ({ ...(prev || {}), avatarUrl }));
 
-      // Update in RTDB (skip if timeout — avatar still saved in Firestore)
+      // Update in RTDB (skip if timeout Ã¢â‚¬â€ avatar still saved in Firestore)
       locationService.clearCache();
       await Promise.race([
         locationService.updateMyAvatar(avatarUrl),
@@ -453,3 +478,4 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
 });
+

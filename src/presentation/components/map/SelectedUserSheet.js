@@ -175,21 +175,23 @@ export function SelectedUserSheet({
 const styles = StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.2)",
+    backgroundColor: "rgba(0,0,0,0.28)",
   },
   sheet: {
     position: "absolute",
     left: 12,
     right: 12,
     borderRadius: 24,
-    backgroundColor: "#fff",
+    backgroundColor: COLORS.ink,
     padding: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
     ...SHADOW.card,
   },
   grabber: {
     width: 50,
     height: 5,
-    backgroundColor: "#ccc",
+    backgroundColor: "rgba(255,255,255,0.18)",
     borderRadius: 10,
     alignSelf: "center",
     marginBottom: 10,
@@ -207,13 +209,15 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 20,
+    backgroundColor: COLORS.bgSoft,
   },
   name: {
     fontWeight: "900",
     fontSize: 18,
+    color: COLORS.white,
   },
   handle: {
-    color: "#888",
+    color: COLORS.textMuted,
   },
 
   actionRow: {
@@ -240,7 +244,7 @@ const styles = StyleSheet.create({
 
   momentButton: {
     flex: 1,
-    backgroundColor: "#ec4899",
+    backgroundColor: COLORS.pink,
     borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
@@ -256,17 +260,17 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 20,
-    backgroundColor: "#f43f5e",
+    backgroundColor: COLORS.accent,
     alignItems: "center",
     justifyContent: "center",
   },
 
   modal: {
     position: "absolute",
-    top: "15%",
+    top: "12%",
     left: 10,
     right: 10,
-    bottom: "10%",
+    bottom: 95,
     backgroundColor: "#fff",
     borderRadius: 20,
     padding: 10,

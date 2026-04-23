@@ -261,7 +261,7 @@ class LocationService {
         uid: currentUser.uid,
         displayName: currentUser.displayName,
         initials: currentUser.initials,
-        avatarUrl: currentUser.avatarUrl,
+        avatarUrl: currentUser.avatarUrl || null,
         status: statusInfo,
         speedKmh: Number((coords.speed * 3.6).toFixed(1)),
         batteryLevel:
