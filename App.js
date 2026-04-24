@@ -5,16 +5,49 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import AppNavigator from './src/presentation/navigation/AppNavigator';
 import { StatusBar } from 'expo-status-bar';
 import { authService } from './src/infrastructure/firebase/authService';
+import { adminService, ADMIN_EMAILS } from './src/infrastructure/firebase/adminService';
 import { COLORS } from './src/presentation/theme';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from './src/infrastructure/firebase/firebase';
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [initializing, setInitializing] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = authService.subscribe((user) => {
-      setIsAuthenticated(!!user);
-      setInitializing(false);
+    const unsubscribe = authService.subscribe(async (user) => {
+      if (!user) {
+        setIsAuthenticated(false);
+        setIsAdmin(false);
+        setInitializing(false);
+        return;
+      }
+
+      setIsAuthenticated(true);
+
+      try {
+        // Auto-assign admin role if email is whitelisted
+        if (user.email && ADMIN_EMAILS.includes(user.email.toLowerCase())) {
+          await adminService.ensureAdminRole(user.uid || user.id, user.email);
+          setIsAdmin(true);
+        } else {
+          // Check role field in Firestore
+          const uid = user.uid || user.id;
+          if (uid) {
+            const userDoc = await getDoc(doc(db, 'users', uid));
+            const role = userDoc.exists() ? userDoc.data().role : null;
+            setIsAdmin(role === 'admin');
+          } else {
+            setIsAdmin(false);
+          }
+        }
+      } catch (e) {
+        console.error('[App] Role check failed:', e);
+        setIsAdmin(false);
+      } finally {
+        setInitializing(false);
+      }
     });
 
     return unsubscribe;
@@ -31,8 +64,8 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: COLORS.bg }}>
       <NavigationContainer>
-        <StatusBar style="dark" backgroundColor={COLORS.bg} />
-        <AppNavigator isAuthenticated={isAuthenticated} />
+        <StatusBar style={isAdmin ? 'light' : 'dark'} backgroundColor={isAdmin ? '#0A0E1A' : COLORS.bg} />
+        <AppNavigator isAuthenticated={isAuthenticated} isAdmin={isAdmin} />
       </NavigationContainer>
     </GestureHandlerRootView>
   );

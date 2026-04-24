@@ -166,7 +166,7 @@ export default function MapScreen({ navigation }) {
       }
     }, 600);
     return () => clearTimeout(timer);
-  }, [focusUid, otherUsers]);
+  }, [focusUid, otherUsers, friendProfiles]);
 
   const coords = location?.coords ?? null;
   const currentName =
@@ -487,10 +487,36 @@ export default function MapScreen({ navigation }) {
     return nextFootprints;
   }, [currentName, footprints, friendTrails, localTrail]);
 
-  const focusFriend = (uid, user) => {
+  const focusFriend = useCallback(async (uid, user) => {
     setFollowCurrentUser(false);
     setSelectedFriendUid(uid);
-    setSelectedUser({ uid, ...user });
+
+    // Try to get profile from cache first
+    let profile = friendProfiles[uid];
+
+    // If not in cache, fetch directly
+    if (!profile) {
+      try {
+        const snapshot = await getDoc(doc(db, "users", uid));
+        if (snapshot.exists()) {
+          const data = snapshot.data();
+          profile = {
+            displayName: data.name || data.displayName || null,
+            avatarUrl: data.avatarUrl || data.photoURL || data.photoUrl || null,
+          };
+        }
+      } catch (error) {
+        console.warn("[MapScreen] Could not fetch friend profile:", error.message);
+      }
+    }
+
+    const enrichedUser = {
+      uid,
+      ...user,
+      displayName: profile?.displayName || user.displayName || "Friend",
+      avatarUrl: profile?.avatarUrl || user.avatarUrl || null,
+    };
+    setSelectedUser(enrichedUser);
     setShowMyCard(false);
     mapRef.current?.animateCamera(
       {
@@ -505,7 +531,7 @@ export default function MapScreen({ navigation }) {
       },
       { duration: 950 },
     );
-  };
+  }, [friendProfiles]);
 
   const centerOnMe = () => {
     if (!coords || !mapRef.current) return;

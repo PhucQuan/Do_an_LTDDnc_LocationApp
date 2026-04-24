@@ -97,9 +97,11 @@ export function SelectedUserSheet({
               />
             </TouchableOpacity>
 
-            <View style={{ flex: 1 }}>
-              <Text style={styles.name}>{user.displayName || "Friend"}</Text>
-              <Text style={styles.handle}>
+            <View style={styles.userInfo}>
+              <Text style={styles.name} numberOfLines={1}>
+                {user.displayName || "Friend"}
+              </Text>
+              <Text style={styles.handle} numberOfLines={1}>
                 @
                 {(user.displayName || "friend")
                   .replace(/\s+/g, "")
@@ -211,10 +213,15 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     backgroundColor: COLORS.bgSoft,
   },
+  userInfo: {
+    flex: 1,
+    justifyContent: "center",
+  },
   name: {
     fontWeight: "900",
     fontSize: 18,
     color: COLORS.white,
+    marginBottom: 2,
   },
   handle: {
     color: COLORS.textMuted,
